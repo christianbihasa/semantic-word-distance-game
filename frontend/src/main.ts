@@ -52,6 +52,132 @@ const menuOptions = document.getElementById("menu-options") as HTMLDivElement;
 const hintBtn = document.getElementById("hint-btn") as HTMLButtonElement;
 const giveupBtn = document.getElementById("giveup-btn") as HTMLButtonElement;
 
+// Persistence / Caching keys and constants
+const STORAGE_KEY = "heat_seek_session_state";
+const WORD_BANK_VERSION_KEY = "heat_seek_wordbank_version";
+const IDB_DB_NAME = "heat_seek_engine";
+const IDB_STORE_NAME = "vocab_store";
+const IDB_VOCAB_KEY = "wordRankData";
+
+// --- Session Persistence Helpers (LocalStorage) ---
+function saveSessionToStorage(): void {
+  try {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        targetWord: state.targetWord,
+        guesses: state.guesses,
+        latestGuess: state.latestGuess,
+        isGameOver: state.isGameOver,
+      }),
+    );
+  } catch (e) {
+    console.warn("Failed to save session state:", e);
+  }
+}
+
+function loadSessionFromStorage(): any | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    console.warn("Failed to load session state:", e);
+    return null;
+  }
+}
+
+function clearSessionStorage(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    console.warn("Failed to clear session state:", e);
+  }
+}
+
+// --- IndexedDB Helpers (Engine Cache) ---
+function openIDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(IDB_STORE_NAME)) {
+        db.createObjectStore(IDB_STORE_NAME);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveVocabularyToIDB(wordRankData: Record<string, number>, version: string) {
+  const db = await openIDB();
+  const tx = db.transaction(IDB_STORE_NAME, "readwrite");
+  const store = tx.objectStore(IDB_STORE_NAME);
+  store.put({ version, data: wordRankData }, IDB_VOCAB_KEY);
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getVocabularyFromIDB(): Promise<{version: string; data: Record<string, number>} | null> {
+  const db = await openIDB();
+  const tx = db.transaction(IDB_STORE_NAME, "readonly");
+  const store = tx.objectStore(IDB_STORE_NAME);
+  const req = store.get(IDB_VOCAB_KEY);
+  return new Promise((resolve) => {
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+// (No explicit delete helper needed currently)
+
+async function fetchVocabularyWithCache(): Promise<Record<string, number>> {
+  // Attempt: 1) Check IDB for cached vocab + version; 2) Validate version against localStorage; 3) If mismatch or miss => fetch network, store to IDB + version
+  try {
+    const cached = await getVocabularyFromIDB();
+    const localVersion = localStorage.getItem(WORD_BANK_VERSION_KEY);
+
+    if (cached && cached.version && localVersion === cached.version) {
+      return cached.data;
+    }
+
+    // Otherwise fetch from network
+    const resp = await fetch("/src/wordbank.json");
+    if (!resp.ok) throw new Error("Failed to fetch wordbank.json");
+    const data = await resp.json();
+
+    // Determine version if provided by file; fallback to timestamp
+    const detectedVersion = (data && data.wordbank_version) || `${Date.now()}`;
+
+    // If the file includes a version field, prefer it; else use timestamp
+    const toStoreData: Record<string, number> = data;
+    await saveVocabularyToIDB(toStoreData, detectedVersion);
+    try {
+      localStorage.setItem(WORD_BANK_VERSION_KEY, detectedVersion);
+    } catch (e) {
+      console.warn("Failed to persist wordbank version:", e);
+    }
+
+    return toStoreData;
+  } catch (e) {
+    console.warn("Vocabulary cache failed, falling back to network:", e);
+    // As a last resort, try direct fetch again
+    const resp = await fetch("/src/wordbank.json");
+    if (!resp.ok) throw new Error("Failed to fetch wordbank.json");
+    return resp.json();
+  }
+}
+
+function hydrateWordRankMap(rawData: Record<string, number>) {
+  wordRankMap.clear();
+  Object.entries(rawData).forEach(([word, rank]) => {
+    wordRankMap.set(word, rank as number);
+  });
+  state.wordbank = Array.from(wordRankMap.keys());
+}
+
 // Temperature Color Grading
 function getTierClass(rank: number): "hot" | "warm" | "cold" {
   if (rank === 1 || (rank >= 2 && rank <= 75)) return "hot";
@@ -124,30 +250,37 @@ function determineRootWord(word: string): string {
 
 async function initGameEngine() {
   try {
-    // Show loading state
     hintDisplayContainer.innerHTML = "Initializing engine...";
 
-    const response = await fetch("/src/wordbank.json");
-    if (!response.ok)
-      throw new Error("Failed to load wordbank configuration asset.");
-
-    // Load pre-formatted object {word: rank} directly into map
-    const wordRankData = await response.json();
-    wordRankMap.clear();
-    Object.entries(wordRankData).forEach(([word, rank]) => {
-      wordRankMap.set(word, rank as number);
-    });
-
-    // Extract wordbank as array from map keys
-    state.wordbank = Array.from(wordRankMap.keys());
-
-    // Clear loading message
-    hintDisplayContainer.innerHTML = "";
+    // 1) Load vocabulary from IndexedDB cache or network
+    const rawData = await fetchVocabularyWithCache();
+    hydrateWordRankMap(rawData as Record<string, number>);
 
     console.log(
       `🚀 Heat Seek engine active with ${state.wordbank.length.toLocaleString()} words.`,
     );
-    startNewGameRound();
+
+    // 2) Restore any in-progress session from localStorage
+    const saved = loadSessionFromStorage();
+    if (saved && saved.targetWord) {
+      state.targetWord = saved.targetWord;
+      state.guesses = saved.guesses || [];
+      state.latestGuess = saved.latestGuess || null;
+      state.isGameOver = Boolean(saved.isGameOver);
+
+      // Clear loading UI and re-render restored game state
+      hintDisplayContainer.innerHTML = "";
+      renderGame();
+
+      if (state.isGameOver) {
+        // Re-evaluate win condition to show modal correctly
+        triggerEndGameOverlay(state.guesses.some((g) => g.rank === 1));
+      }
+    } else {
+      // No saved session: start fresh
+      hintDisplayContainer.innerHTML = "";
+      startNewGameRound();
+    }
   } catch (error) {
     console.error("Engine Init Failure:", error);
     hintDisplayContainer.innerHTML = `<div class="hint-banner reveal-banner">⚠️ System initialization failure.</div>`;
@@ -155,6 +288,8 @@ async function initGameEngine() {
 }
 
 function startNewGameRound(): void {
+  // Clear any previous session so replay starts fresh
+  clearSessionStorage();
   if (state.wordbank.length === 0) return;
 
   // 1. Establish targeted secret word index
@@ -268,6 +403,9 @@ function triggerEndGameOverlay(isWin: boolean): void {
   state.isGameOver = true;
   guessInput.disabled = true;
 
+  // Persist final session state
+  saveSessionToStorage();
+
   if (isWin) {
     confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
   }
@@ -379,6 +517,9 @@ function handleGetHint(): void {
   state.guesses.push(hintGuess);
   state.latestGuess = hintGuess;
 
+  // Save session after producing a hint
+  saveSessionToStorage();
+
   renderGame();
   checkWinCondition(); // Constant Checker ensures overlay runs if hint hits #1
 }
@@ -437,6 +578,9 @@ function handleGuessSubmit(event: Event): void {
   state.guesses.push(newGuess);
   state.latestGuess = newGuess;
   guessInput.value = "";
+
+  // Persist session after a new guess
+  saveSessionToStorage();
 
   renderGame();
   checkWinCondition(); // Constant win verification execution block
