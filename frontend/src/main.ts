@@ -4,6 +4,7 @@ interface Guess {
   word: string;
   rank: number;
   timestamp: number;
+  isHint?: boolean; // Distinguishes automated hints from organic guesses
 }
 
 interface GameState {
@@ -53,9 +54,8 @@ function getTierClass(rank: number): "green" | "yellow" | "red" {
   return "red";
 }
 
-// Deep Morphological Root Parser (Prioritizes root conversion even if plural exists in bank)
+// Deep Morphological Root Parser
 function determineRootWord(word: string): string {
-  // 1. Irregular Plural Transformations Dictionary
   const irregularPlurals: { [key: string]: string } = {
     leaves: "leaf",
     knives: "knife",
@@ -85,13 +85,11 @@ function determineRootWord(word: string): string {
     return irregularPlurals[word];
   }
 
-  // 2. Suffix "-ies" -> "-y" (e.g., puppies -> puppy, cities -> city)
   if (word.endsWith("ies") && word.length > 3) {
     const root = word.slice(0, -3) + "y";
     if (wordRankMap.has(root)) return root;
   }
 
-  // 3. Suffix "-ves" -> "-f" or "-fe" fallbacks (if missing from explicit dictionary)
   if (word.endsWith("ves") && word.length > 3) {
     const rootF = word.slice(0, -3) + "f";
     if (wordRankMap.has(rootF)) return rootF;
@@ -99,19 +97,16 @@ function determineRootWord(word: string): string {
     if (wordRankMap.has(rootFE)) return rootFE;
   }
 
-  // 4. Suffix "-es" -> strip "-es" (e.g., boxes -> box, matches -> match)
   if (word.endsWith("es") && word.length > 2) {
     const root = word.slice(0, -2);
     if (wordRankMap.has(root)) return root;
   }
 
-  // 5. Suffix "-s" -> strip "-s" (e.g., dogs -> dog)
   if (word.endsWith("s") && !word.endsWith("ss") && word.length > 1) {
     const root = word.slice(0, -1);
     if (wordRankMap.has(root)) return root;
   }
 
-  // 6. Suffix "-ed" -> strip "-ed" or "-d" (e.g., walked -> walk, baked -> bake)
   if (word.endsWith("ed") && word.length > 2) {
     const rootEd = word.slice(0, -2);
     if (wordRankMap.has(rootEd)) return rootEd;
@@ -119,7 +114,6 @@ function determineRootWord(word: string): string {
     const rootD = word.slice(0, -1);
     if (wordRankMap.has(rootD)) return rootD;
 
-    // Handle double-consonant tracking (e.g., clapped -> clap)
     if (
       rootEd.length > 2 &&
       rootEd[rootEd.length - 1] === rootEd[rootEd.length - 2]
@@ -129,7 +123,6 @@ function determineRootWord(word: string): string {
     }
   }
 
-  // 7. Suffix "-ing" -> strip "-ing" or morph to "-e" (e.g., painting -> paint, baking -> bake)
   if (word.endsWith("ing") && word.length > 3) {
     const rootIng = word.slice(0, -3);
     if (wordRankMap.has(rootIng)) return rootIng;
@@ -137,7 +130,6 @@ function determineRootWord(word: string): string {
     const rootE = rootIng + "e";
     if (wordRankMap.has(rootE)) return rootE;
 
-    // Handle double-consonant tracking (e.g., running -> run)
     if (
       rootIng.length > 2 &&
       rootIng[rootIng.length - 1] === rootIng[rootIng.length - 2]
@@ -157,7 +149,6 @@ async function initGameEngine() {
       throw new Error("Failed to load compiled wordbank configuration asset.");
 
     state.wordbank = await response.json();
-    state.targetWord = state.wordbank[0];
 
     wordRankMap.clear();
     state.wordbank.forEach((word: string, index: number) => {
@@ -167,15 +158,47 @@ async function initGameEngine() {
     console.log(
       `🚀 Game Engine active with ${state.wordbank.length.toLocaleString()} words.`,
     );
-    renderGame();
+    startNewGameRound();
   } catch (error) {
     console.error("Engine Init Failure:", error);
     hintDisplayContainer.innerHTML = `<div class="hint-banner reveal-banner">⚠️ System initialization failure.</div>`;
   }
 }
 
+function startNewGameRound(): void {
+  // Select a random secret word from top tiers for fresh replayability
+  const randomIndex = Math.floor(
+    Math.random() * Math.min(50, state.wordbank.length),
+  );
+  state.targetWord = state.wordbank[randomIndex];
+
+  state.guesses = [];
+  state.latestGuess = null;
+  state.isGameOver = false;
+
+  guessInput.disabled = false;
+  guessInput.value = "";
+  hintDisplayContainer.innerHTML = "";
+
+  renderGame();
+}
+
 function renderGame(): void {
+  // Sync Badge Counter
   guessCounterBadge.textContent = `#${state.guesses.length + 1}`;
+
+  // Balance vertical spacing layout inside card when zero items exist
+  const cardElement =
+    guessForm.closest(".game-card") || guessForm.parentElement;
+  if (cardElement) {
+    if (state.guesses.length === 0) {
+      cardElement.classList.add("game-card-empty");
+      guessListContainer.style.display = "none";
+    } else {
+      cardElement.classList.remove("game-card-empty");
+      guessListContainer.style.display = "flex";
+    }
+  }
 
   if (state.latestGuess) {
     const tier = getTierClass(state.latestGuess.rank);
@@ -205,11 +228,63 @@ function renderGame(): void {
     row.innerHTML = `
       <div class="word-wrapper">
         ${isTargetLatest ? '<span class="arrow-indicator">➔</span> ' : ""}
-        <span class="word-text">${guess.word}</span>
+        <span class="word-text">${guess.word} ${guess.isHint ? '<small style="opacity:0.6; font-size:0.75rem;">(Hint)</small>' : ""}</span>
       </div>
       <span class="rank-value">#${guess.rank}</span>
     `;
     guessListContainer.appendChild(row);
+  });
+}
+
+function triggerVictoryOverlay(): void {
+  state.isGameOver = true;
+  guessInput.disabled = true;
+  confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+
+  const hintsUsedCount = state.guesses.filter((g) => g.isHint).length;
+  const directGuessesCount = state.guesses.length - hintsUsedCount;
+
+  // Append Custom Layout Modal matching project look and feel
+  const modalOverlay = document.createElement("div");
+  modalOverlay.className = "win-modal-overlay";
+  modalOverlay.id = "victory-modal-popup";
+
+  modalOverlay.innerHTML = `
+    <div class="win-modal-card">
+      <div class="win-modal-header">You Won!</div>
+      <div class="win-modal-body">
+        <span class="modal-word-label">THE WORD WAS</span>
+        <div class="modal-word-reveal">${state.targetWord.toUpperCase()}</div>
+        <div class="modal-stats-grid">
+          <div class="modal-stat-box">
+            <span class="stat-label">GUESSES</span>
+            <span class="stat-value">${directGuessesCount}</span>
+          </div>
+          <div class="modal-stat-box">
+            <span class="stat-label">HINTS</span>
+            <span class="stat-value">${hintsUsedCount}</span>
+          </div>
+        </div>
+      </div>
+      <div class="win-modal-footer">
+        <button id="modal-play-again-btn" class="modal-btn primary-btn">Play Again</button>
+        <button id="modal-close-btn" class="modal-btn secondary-btn">Close</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modalOverlay);
+
+  // Modal Event Logic
+  document
+    .getElementById("modal-play-again-btn")
+    ?.addEventListener("click", () => {
+      modalOverlay.remove();
+      startNewGameRound();
+    });
+
+  document.getElementById("modal-close-btn")?.addEventListener("click", () => {
+    modalOverlay.remove();
   });
 }
 
@@ -225,7 +300,14 @@ function handleGetHint(): void {
   }
 
   if (currentClosestRank === 1) {
-    alert("The secret word has already been discovered!");
+    latestGuessContainer.innerHTML = `
+      <div class="latest-guess-box warning-box">
+        <div>
+          <span class="latest-label">Notice</span>
+          The secret word has already been discovered!
+        </div>
+      </div>
+    `;
     return;
   }
 
@@ -258,18 +340,14 @@ function handleGetHint(): void {
     word: hintWord,
     rank: targetRank,
     timestamp: Date.now(),
+    isHint: true,
   };
 
   state.guesses.push(hintGuess);
   state.latestGuess = hintGuess;
 
   if (targetRank === 1) {
-    state.isGameOver = true;
-    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-    setTimeout(
-      () => alert(`🎉 The Hint revealed the secret word! Game Over!`),
-      250,
-    );
+    setTimeout(() => triggerVictoryOverlay(), 250);
   }
 
   renderGame();
@@ -285,7 +363,6 @@ function handleGiveUp(): void {
       🏳️ You surrendered! The secret word was <strong>"${state.targetWord}"</strong> (#1).
     </div>
   `;
-
   guessInput.disabled = true;
 }
 
@@ -299,7 +376,14 @@ function handleGuessSubmit(event: Event): void {
   const rawWord = determineRootWord(inputWord);
 
   if (!wordRankMap.has(rawWord)) {
-    alert(`"${inputWord}" is not in the semantic database dictionary.`);
+    latestGuessContainer.innerHTML = `
+      <div class="latest-guess-box warning-box animate-shake">
+        <div>
+          <span class="latest-label">Error</span>
+          <strong>"${inputWord}"</strong> is not in the database dictionary.
+        </div>
+      </div>
+    `;
     guessInput.value = "";
     return;
   }
@@ -309,7 +393,15 @@ function handleGuessSubmit(event: Event): void {
 
   const alreadyGuessed = state.guesses.some((g) => g.word === rawWord);
   if (alreadyGuessed) {
-    alert(`You've already tried "${rawWord}"!`);
+    // Elegant native Alert box replacement rule injection
+    latestGuessContainer.innerHTML = `
+      <div class="latest-guess-box warning-box animate-shake">
+        <div>
+          <span class="latest-label">Notice</span>
+          <strong>"${rawWord}"</strong> has already been guessed!
+        </div>
+      </div>
+    `;
     guessInput.value = "";
     return;
   }
@@ -318,6 +410,7 @@ function handleGuessSubmit(event: Event): void {
     word: rawWord,
     rank: computedRank,
     timestamp: Date.now(),
+    isHint: false,
   };
 
   state.guesses.push(newGuess);
@@ -325,16 +418,7 @@ function handleGuessSubmit(event: Event): void {
   guessInput.value = "";
 
   if (computedRank === 1) {
-    state.isGameOver = true;
-    hintDisplayContainer.innerHTML = "";
-    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-    setTimeout(
-      () =>
-        alert(
-          `🎉 Incredible! You found the secret word in ${state.guesses.length} attempts!`,
-        ),
-      250,
-    );
+    setTimeout(() => triggerVictoryOverlay(), 250);
   }
 
   renderGame();
