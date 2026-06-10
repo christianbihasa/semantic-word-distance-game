@@ -4,6 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Hot or Cold Word Game</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,400;0,700;0,900;1,300;1,400;1,700;1,900&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -15,36 +21,37 @@
 
       <main class="game-container">
         <form id="guess-form" autocomplete="off">
-          <input
-            type="text"
-            id="guess-input"
-            placeholder="Type a word..."
-            required
-            autofocus
-          />
-          <button type="submit">Guess</button>
+          <div class="input-wrapper">
+            <input
+              type="text"
+              id="guess-input"
+              placeholder="Type a word..."
+              required
+              autofocus
+            />
+            <span id="guess-counter-badge">#1</span>
+
+            <div class="menu-dropdown">
+              <button
+                type="button"
+                id="menu-toggle-btn"
+                class="menu-icon-btn"
+                aria-label="Options"
+              >
+                ⋮
+              </button>
+              <div id="menu-options" class="dropdown-content hidden">
+                <button type="button" id="hint-btn">💡 Get Hint</button>
+                <button type="button" id="giveup-btn" class="danger-btn">
+                  🏳️ Give Up
+                </button>
+              </div>
+            </div>
+          </div>
         </form>
 
         <div id="latest-guess-container"></div>
-
-        <div class="control-bar">
-          <span id="guess-count">Guesses: 0</span>
-
-          <div class="menu-dropdown">
-            <button type="button" id="menu-toggle-btn" class="menu-btn">
-              Options ▾
-            </button>
-            <div id="menu-options" class="dropdown-content hidden">
-              <button type="button" id="hint-btn">Get Hint</button>
-              <button type="button" id="giveup-btn" class="danger-btn">
-                Give Up
-              </button>
-            </div>
-          </div>
-        </div>
-
         <div id="hint-display-container"></div>
-
         <div id="guess-list" class="guess-list"></div>
       </main>
     </div>
