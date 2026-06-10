@@ -5,10 +5,10 @@
   --text-muted: #94a3b8;
   --input-border: #334155;
 
-  /* Tier Colors */
-  --tier-green: #10b981;
-  --tier-yellow: #eab308;
-  --tier-red: #ef4444;
+  /* Classic Theme Configurations */
+  --heat-hot: #10b981; /* Emerald Green */
+  --heat-warm: #eab308; /* Amber Yellow */
+  --heat-cold: #ef4444; /* Crimson Red */
 }
 
 body {
@@ -23,7 +23,7 @@ body {
 
 #app {
   width: 100%;
-  max-width: 600px;
+  max-width: 480px; /* Constrains global alignment profile footprint */
 }
 
 header {
@@ -33,24 +33,63 @@ header {
 
 header h1 {
   margin: 0 0 0.5rem 0;
-  font-size: 2.3rem;
+  font-size: 2.6rem;
   font-weight: 900;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+}
+
+/* High-Contrast Title Accents */
+.title-hot {
+  color: var(--heat-hot);
+  text-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+.title-cold {
+  color: var(--heat-cold);
+  text-shadow: 0 4px 12px rgba(239, 68, 68, 0.15);
 }
 
 header p {
   color: var(--text-muted);
   margin: 0;
   font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Inline Legend Context Highlights */
+.text-hot {
+  color: var(--heat-hot);
+  font-weight: 700;
+}
+.text-warm {
+  color: var(--heat-warm);
+  font-weight: 700;
+}
+.text-cold {
+  color: var(--heat-cold);
+  font-weight: 700;
 }
 
 .game-container {
   background-color: var(--panel-bg);
-  padding: 1.5rem;
+  padding: 1.5rem; /* Symmetrical spacing layout across all 4 edges */
   border-radius: 12px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
 }
 
-/* Consolidated Input Box */
+/* Symmetrical width block alignment rules */
+#guess-form,
+#latest-guess-container,
+.guess-divider,
+#hint-display-container,
+#guess-list {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Form Input Wrapper Elements */
 .input-wrapper {
   position: relative;
   display: flex;
@@ -63,13 +102,13 @@ header p {
 }
 
 .input-wrapper:focus-within {
-  border-color: var(--tier-green);
-  box-shadow: 0 0 0 1px var(--tier-green);
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
 }
 
 #guess-input {
   flex: 1;
-  padding: 0.85rem 5.5rem 0.85rem 1rem; /* Tightened padding since text is gone */
+  padding: 0.85rem 5.5rem 0.85rem 1rem;
   border: none;
   background: transparent;
   color: var(--text-main);
@@ -80,14 +119,13 @@ header p {
 
 #guess-counter-badge {
   position: absolute;
-  right: 3.2rem; /* Clean alignment next to the new icon button */
+  right: 3.2rem;
   color: var(--text-muted);
   font-weight: 700;
   font-size: 0.9rem;
   user-select: none;
 }
 
-/* Subtle, High-Fidelity Icon Trigger Button */
 .menu-icon-btn {
   background: transparent;
   border: none;
@@ -103,7 +141,6 @@ header p {
   transition: all 0.2s ease-in-out;
 }
 
-/* Distinct yet elegant feedback to reveal clickability */
 .menu-icon-btn:hover {
   background-color: rgba(255, 255, 255, 0.08);
   color: var(--text-main);
@@ -119,7 +156,7 @@ header p {
 .dropdown-content {
   position: absolute;
   right: 0;
-  top: 140%; /* Leaves a tiny gap below the input wrapper */
+  top: 140%;
   background-color: #1e293b;
   border: 1px solid #475569;
   border-radius: 6px;
@@ -151,7 +188,7 @@ header p {
 }
 
 .dropdown-content button.danger-btn {
-  color: var(--tier-red);
+  color: #f87171;
 }
 
 .dropdown-content button.danger-btn:hover {
@@ -162,9 +199,16 @@ header p {
   display: none !important;
 }
 
-/* Latest Guess Presentation Panel */
+/* Layout Splitter and Panels */
 #latest-guess-container {
-  margin: 1.5rem 0;
+  margin-top: 1.25rem;
+}
+
+.guess-divider {
+  border: 0;
+  height: 1px;
+  background: #334155;
+  margin: 1.25rem 0;
 }
 
 .latest-guess-box {
@@ -175,34 +219,43 @@ header p {
   border-radius: 8px;
   font-weight: 700;
   font-size: 1.2rem;
-  color: #000000;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
   animation: popIn 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.latest-guess-box.green {
-  background-color: var(--tier-green);
+/* Accessibility Layer: Contrasted Text Configurations per Temperature State */
+.latest-guess-box.hot,
+.guess-row.hot {
+  background-color: var(--heat-hot);
+  color: #ffffff;
 }
-.latest-guess-box.yellow {
-  background-color: var(--tier-yellow);
+.latest-guess-box.warm,
+.guess-row.warm {
+  background-color: var(--heat-warm);
+  color: #0f172a; /* Dark navy text override for crisp yellow accessibility */
 }
-.latest-guess-box.red {
-  background-color: var(--tier-red);
-  color: white;
+.latest-guess-box.cold,
+.guess-row.cold {
+  background-color: var(--heat-cold);
+  color: #ffffff;
+}
+
+.latest-guess-box.warm .latest-label {
+  color: #1e293b;
+  opacity: 0.8;
 }
 
 .latest-label {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  opacity: 0.7;
+  opacity: 0.85;
   display: block;
   margin-bottom: 0.2rem;
 }
 
-/* Hints Layout */
 #hint-display-container {
-  margin-bottom: 1.5rem;
+  margin-top: 1rem;
 }
 
 .hint-banner {
@@ -219,10 +272,10 @@ header p {
 
 .hint-banner.reveal-banner {
   background-color: #334155;
-  border-left-color: var(--tier-red);
+  border-left-color: var(--heat-cold);
 }
 
-/* Clean UI Scrollbar Design Integration */
+/* Scroll View History Layout Lists */
 .guess-list {
   display: flex;
   flex-direction: column;
@@ -248,7 +301,7 @@ header p {
 }
 
 .guess-list::-webkit-scrollbar-thumb:hover {
-  background-color: var(--tier-green);
+  background-color: #3b82f6;
 }
 
 .guess-row {
@@ -258,18 +311,6 @@ header p {
   padding: 0.75rem 1rem;
   border-radius: 6px;
   font-weight: 600;
-  color: #000000;
-}
-
-.guess-row.green {
-  background-color: var(--tier-green);
-}
-.guess-row.yellow {
-  background-color: var(--tier-yellow);
-}
-.guess-row.red {
-  background-color: var(--tier-red);
-  color: white;
 }
 
 .word-wrapper {
@@ -278,22 +319,19 @@ header p {
   gap: 0.5rem;
 }
 
+.hint-bulb-icon {
+  font-size: 1rem;
+  user-select: none;
+}
+
 .arrow-indicator {
   font-weight: 900;
 }
 
-/* Symmetrical layout adjustment when no guesses are made */
-.game-card {
-  transition: all 0.3s ease-in-out;
-  display: flex;
-  flex-direction: column;
-}
-
 .game-card-empty {
-  padding-bottom: 2rem !important; /* Forces uniform spacing around input box */
+  padding-bottom: 0 !important;
 }
 
-/* Custom Notification Warning Boxes */
 .warning-box {
   background-color: #7f1d1d !important;
   border-left: 5px solid #ef4444 !important;
@@ -317,7 +355,7 @@ header p {
   animation: shake 0.2s ease-in-out 2;
 }
 
-/* Victory Popup Custom Modal Overlay Layout */
+/* Modal Core Components */
 .win-modal-overlay {
   position: fixed;
   top: 0;
@@ -341,7 +379,6 @@ header p {
   max-width: 440px;
   overflow: hidden;
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  transform: scale(1);
   animation: scaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -454,7 +491,6 @@ header p {
     opacity: 1;
   }
 }
-
 @keyframes scaleUp {
   from {
     transform: scale(0.9) translateY(10px);
@@ -465,7 +501,6 @@ header p {
     opacity: 1;
   }
 }
-
 @keyframes popIn {
   from {
     transform: scale(0.95);
@@ -476,7 +511,6 @@ header p {
     opacity: 1;
   }
 }
-
 @keyframes slideIn {
   from {
     transform: translateY(-10px);

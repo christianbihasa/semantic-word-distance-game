@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hot or Cold Word Game</title>
+    <title>Heat Seek - Word Game</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,8 +15,16 @@
   <body>
     <div id="app">
       <header>
-        <h1>Hot or Cold Word Game</h1>
-        <p>Guess the secret word based on contextual meaning.</p>
+        <h1>
+          <span class="title-hot">Heat</span>
+          <span class="title-cold">Seek</span>
+        </h1>
+        <p>
+          Guess the word and see how close you are:
+          <span class="text-hot" style="color: #10b981;">hot</span>,
+          <span class="text-warm" style="color: #eab308;">warm</span>, or
+          <span class="text-cold" style="color: #ef4444;">ice cold</span>.
+        </p>
       </header>
 
       <main class="game-container">
@@ -51,6 +59,9 @@
         </form>
 
         <div id="latest-guess-container"></div>
+
+        <hr id="guess-divider" class="guess-divider hidden" />
+
         <div id="hint-display-container"></div>
         <div id="guess-list" class="guess-list"></div>
       </main>
