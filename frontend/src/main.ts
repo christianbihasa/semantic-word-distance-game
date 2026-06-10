@@ -124,11 +124,26 @@ function determineRootWord(word: string): string {
 
 async function initGameEngine() {
   try {
+    // Show loading state
+    hintDisplayContainer.innerHTML = "Initializing engine...";
+
     const response = await fetch("/src/wordbank.json");
     if (!response.ok)
       throw new Error("Failed to load wordbank configuration asset.");
 
-    state.wordbank = await response.json();
+    // Load pre-formatted object {word: rank} directly into map
+    const wordRankData = await response.json();
+    wordRankMap.clear();
+    Object.entries(wordRankData).forEach(([word, rank]) => {
+      wordRankMap.set(word, rank as number);
+    });
+
+    // Extract wordbank as array from map keys
+    state.wordbank = Array.from(wordRankMap.keys());
+
+    // Clear loading message
+    hintDisplayContainer.innerHTML = "";
+
     console.log(
       `🚀 Heat Seek engine active with ${state.wordbank.length.toLocaleString()} words.`,
     );
