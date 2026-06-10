@@ -1,0 +1,23 @@
+# System files
+.DS_Store
+Thumbs.db
+
+# Python environments & artifacts
+data-pipeline/.venv/
+data-pipeline/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+# Ignore raw massive wordbank files (e.g., raw .bin or .txt embeddings)
+data-pipeline/raw_source/
+
+# Node environments & build targets
+frontend/node_modules/
+frontend/dist/
+frontend/.env*
+
+# IDE/Editor local settings
+.vscode/
+.idea/
