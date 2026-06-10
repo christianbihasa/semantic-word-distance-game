@@ -23,7 +23,7 @@ body {
 
 #app {
   width: 100%;
-  max-width: 480px; /* Constrains global alignment profile footprint */
+  max-width: 480px;
 }
 
 header {
@@ -72,7 +72,7 @@ header p {
 
 .game-container {
   background-color: var(--panel-bg);
-  padding: 1.5rem; /* Symmetrical spacing layout across all 4 edges */
+  padding: 1.5rem;
   border-radius: 12px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
   display: flex;
@@ -232,7 +232,7 @@ header p {
 .latest-guess-box.warm,
 .guess-row.warm {
   background-color: var(--heat-warm);
-  color: #0f172a; /* Dark navy text override for crisp yellow accessibility */
+  color: #0f172a;
 }
 .latest-guess-box.cold,
 .guess-row.cold {
@@ -255,18 +255,26 @@ header p {
 }
 
 #hint-display-container {
-  margin-top: 1rem;
+  margin: 1.25rem 0;
+  width: 100%;
+  box-sizing: border-box;
 }
 
+/* Equalized Symmetrical Padding Optimization */
 .hint-banner {
   background-color: #1d4ed8;
   color: white;
-  padding: 0.75rem 1rem;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1;
   text-align: center;
   border-left: 4px solid #60a5fa;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.15);
   animation: slideIn 0.2s ease-out;
 }
 

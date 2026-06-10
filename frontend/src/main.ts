@@ -25,6 +25,7 @@ const state: GameState = {
   isGameOver: false,
 };
 
+// Map storing clean, uniquely assigned non-duplicate ranks per word
 const wordRankMap = new Map<string, number>();
 
 // DOM Elements Cache
@@ -51,14 +52,14 @@ const menuOptions = document.getElementById("menu-options") as HTMLDivElement;
 const hintBtn = document.getElementById("hint-btn") as HTMLButtonElement;
 const giveupBtn = document.getElementById("giveup-btn") as HTMLButtonElement;
 
-// Normalized Temperature Scale Assignment Mapping
+// Temperature Color Grading
 function getTierClass(rank: number): "hot" | "warm" | "cold" {
   if (rank === 1 || (rank >= 2 && rank <= 75)) return "hot";
   if (rank >= 76 && rank <= 300) return "warm";
   return "cold";
 }
 
-// Suffix Parsing Normalization Rule Engine
+// Suffix Parsing Normalization Engine
 function determineRootWord(word: string): string {
   const irregularPlurals: { [key: string]: string } = {
     leaves: "leaf",
@@ -85,80 +86,49 @@ function determineRootWord(word: string): string {
     fungi: "fungus",
     nuclei: "nucleus",
   };
-  if (irregularPlurals[word] && wordRankMap.has(irregularPlurals[word])) {
-    return irregularPlurals[word];
-  }
 
-  if (word.endsWith("ies") && word.length > 3) {
-    const root = word.slice(0, -3) + "y";
-    if (wordRankMap.has(root)) return root;
-  }
+  const normalized = word.trim().toLowerCase();
+  if (irregularPlurals[normalized]) return irregularPlurals[normalized];
 
-  if (word.endsWith("ves") && word.length > 3) {
-    const rootF = word.slice(0, -3) + "f";
-    if (wordRankMap.has(rootF)) return rootF;
-    const rootFE = word.slice(0, -3) + "fe";
-    if (wordRankMap.has(rootFE)) return rootFE;
+  if (normalized.endsWith("ies") && normalized.length > 3)
+    return normalized.slice(0, -3) + "y";
+  if (normalized.endsWith("ves") && normalized.length > 3) {
+    const fRoot = normalized.slice(0, -3) + "f";
+    return wordRankMap.has(fRoot) ? fRoot : normalized.slice(0, -3) + "fe";
   }
+  if (normalized.endsWith("es") && normalized.length > 2)
+    return normalized.slice(0, -2);
+  if (
+    normalized.endsWith("s") &&
+    !normalized.endsWith("ss") &&
+    normalized.length > 1
+  )
+    return normalized.slice(0, -1);
 
-  if (word.endsWith("es") && word.length > 2) {
-    const root = word.slice(0, -2);
-    if (wordRankMap.has(root)) return root;
-  }
-
-  if (word.endsWith("s") && !word.endsWith("ss") && word.length > 1) {
-    const root = word.slice(0, -1);
-    if (wordRankMap.has(root)) return root;
-  }
-
-  if (word.endsWith("ed") && word.length > 2) {
-    const rootEd = word.slice(0, -2);
+  if (normalized.endsWith("ed") && normalized.length > 2) {
+    const rootEd = normalized.slice(0, -2);
     if (wordRankMap.has(rootEd)) return rootEd;
-
-    const rootD = word.slice(0, -1);
+    const rootD = normalized.slice(0, -1);
     if (wordRankMap.has(rootD)) return rootD;
-
-    if (
-      rootEd.length > 2 &&
-      rootEd[rootEd.length - 1] === rootEd[rootEd.length - 2]
-    ) {
-      const subRoot = rootEd.slice(0, -1);
-      if (wordRankMap.has(subRoot)) return subRoot;
-    }
   }
 
-  if (word.endsWith("ing") && word.length > 3) {
-    const rootIng = word.slice(0, -3);
+  if (normalized.endsWith("ing") && normalized.length > 3) {
+    const rootIng = normalized.slice(0, -3);
     if (wordRankMap.has(rootIng)) return rootIng;
-
     const rootE = rootIng + "e";
     if (wordRankMap.has(rootE)) return rootE;
-
-    if (
-      rootIng.length > 2 &&
-      rootIng[rootIng.length - 1] === rootIng[rootIng.length - 2]
-    ) {
-      const subRoot = rootIng.slice(0, -1);
-      if (wordRankMap.has(subRoot)) return subRoot;
-    }
   }
 
-  return word;
+  return normalized;
 }
 
 async function initGameEngine() {
   try {
     const response = await fetch("/src/wordbank.json");
     if (!response.ok)
-      throw new Error("Failed to load compiled wordbank configuration asset.");
+      throw new Error("Failed to load wordbank configuration asset.");
 
     state.wordbank = await response.json();
-
-    wordRankMap.clear();
-    state.wordbank.forEach((word: string, index: number) => {
-      wordRankMap.set(word, index);
-    });
-
     console.log(
       `🚀 Heat Seek engine active with ${state.wordbank.length.toLocaleString()} words.`,
     );
@@ -172,11 +142,36 @@ async function initGameEngine() {
 function startNewGameRound(): void {
   if (state.wordbank.length === 0) return;
 
+  // 1. Establish targeted secret word index
   state.targetIndex = Math.floor(
     Math.random() * Math.min(150, state.wordbank.length),
   );
-  state.targetWord = state.wordbank[state.targetIndex];
+  state.targetWord = state.wordbank[state.targetIndex].trim().toLowerCase();
 
+  // 2. Clear old mappings and sort entire wordbank relative to target index to prevent duplicate ranks
+  wordRankMap.clear();
+
+  const mappedBank = state.wordbank.map((word) => {
+    const cleanWord = word.trim().toLowerCase();
+    const originalIdx = state.wordbank.indexOf(word);
+    return {
+      word: cleanWord,
+      distance: Math.abs(originalIdx - state.targetIndex),
+    };
+  });
+
+  // Sort ascending by distance. If tied, sort alphabetically to guarantee strict non-duplicate rank ordering
+  mappedBank.sort((a, b) => {
+    if (a.distance !== b.distance) return a.distance - b.distance;
+    return a.word.localeCompare(b.word);
+  });
+
+  // Assign linear unique sequential sequential ranks starting from #1
+  mappedBank.forEach((item, index) => {
+    wordRankMap.set(item.word, index + 1);
+  });
+
+  // 3. Reset Game States
   state.guesses = [];
   state.latestGuess = null;
   state.isGameOver = false;
@@ -242,127 +237,125 @@ function renderGame(): void {
   });
 }
 
-function triggerVictoryOverlay(): void {
+// Constant Fail-Safe Win Checker Function
+function checkWinCondition(): void {
+  if (state.isGameOver) return;
+
+  const hasFoundTarget = state.guesses.some(
+    (g) => g.rank === 1 || g.word === state.targetWord,
+  );
+  if (hasFoundTarget) {
+    setTimeout(() => triggerEndGameOverlay(true), 250);
+  }
+}
+
+function triggerEndGameOverlay(isWin: boolean): void {
   state.isGameOver = true;
   guessInput.disabled = true;
-  confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+
+  if (isWin) {
+    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+  }
 
   const hintsUsedCount = state.guesses.filter((g) => g.isHint).length;
   const directGuessesCount = state.guesses.length - hintsUsedCount;
 
-  const modalOverlay = document.createElement("div");
-  modalOverlay.className = "win-modal-overlay";
-  modalOverlay.id = "victory-modal-popup";
+  const modalOverlay = document.getElementById("game-modal")!;
+  const modalHeader = document.getElementById("modal-header")!;
+  const targetWordDisplay = document.getElementById("modal-target-word")!;
+  const guessesDisplay = document.getElementById("modal-stat-guesses")!;
+  const hintsDisplay = document.getElementById("modal-stat-hints")!;
 
-  modalOverlay.innerHTML = `
-    <div class="win-modal-card">
-      <div class="win-modal-header">Target Acquired!</div>
-      <div class="win-modal-body">
-        <span class="modal-word-label">THE SECRET WORD WAS</span>
-        <div class="modal-word-reveal">${state.targetWord.toUpperCase()}</div>
-        <div class="modal-stats-grid">
-          <div class="modal-stat-box">
-            <span class="stat-label">GUESSES</span>
-            <span class="stat-value">${directGuessesCount}</span>
-          </div>
-          <div class="modal-stat-box">
-            <span class="stat-label">HINTS</span>
-            <span class="stat-value">${hintsUsedCount}</span>
-          </div>
-        </div>
-      </div>
-      <div class="win-modal-footer">
-        <button id="modal-play-again-btn" class="modal-btn primary-btn">Play Again</button>
-        <button id="modal-close-btn" class="modal-btn secondary-btn">Close</button>
-      </div>
-    </div>
-  `;
+  targetWordDisplay.textContent = state.targetWord.toUpperCase();
+  guessesDisplay.textContent = directGuessesCount.toString();
+  hintsDisplay.textContent = hintsUsedCount.toString();
 
-  document.body.appendChild(modalOverlay);
+  if (isWin) {
+    modalHeader.textContent = "TARGET ACQUIRED!";
+    modalHeader.style.backgroundColor = "#10b981";
+  } else {
+    modalHeader.textContent = "MISSION ABANDONED";
+    modalHeader.style.backgroundColor = "#ef4444";
+  }
 
-  document
-    .getElementById("modal-play-again-btn")
-    ?.addEventListener("click", () => {
-      modalOverlay.remove();
-      startNewGameRound();
-    });
-
-  document.getElementById("modal-close-btn")?.addEventListener("click", () => {
-    modalOverlay.remove();
-  });
+  modalOverlay.classList.remove("hidden");
 }
 
 function handleGetHint(): void {
   menuOptions.classList.add("hidden");
   if (state.isGameOver || state.wordbank.length === 0) return;
 
-  hintDisplayContainer.innerHTML = "";
-
   let currentClosestRank = state.wordbank.length;
   if (state.guesses.length > 0) {
     currentClosestRank = Math.min(...state.guesses.map((g) => g.rank));
   }
 
-  if (currentClosestRank === 1) {
-    latestGuessContainer.innerHTML = `
-      <div class="latest-guess-box warning-box">
-        <div>
-          <span class="latest-label">Notice</span>
-          The secret word has already been discovered!
-        </div>
-      </div>
-    `;
-    return;
-  }
+  if (currentClosestRank === 1) return;
 
+  // Determine dynamic approach destination rank targets
   let targetRank = currentClosestRank;
-
-  if (currentClosestRank >= 2 && currentClosestRank <= 50) {
-    targetRank = currentClosestRank - (Math.floor(Math.random() * 3) + 1);
-  } else if (currentClosestRank >= 51 && currentClosestRank <= 100) {
-    targetRank = currentClosestRank - (Math.floor(Math.random() * 8) + 3);
-  } else if (currentClosestRank >= 101 && currentClosestRank <= 1000) {
-    targetRank = currentClosestRank - (Math.floor(Math.random() * 91) + 10);
+  if (currentClosestRank <= 25) {
+    targetRank =
+      currentClosestRank -
+      (Math.floor(Math.random() * Math.min(4, currentClosestRank - 1)) + 1);
+  } else if (currentClosestRank <= 100) {
+    targetRank = currentClosestRank - (Math.floor(Math.random() * 12) + 4);
+  } else if (currentClosestRank <= 1000) {
+    targetRank = Math.floor(currentClosestRank * 0.75);
   } else {
-    const offset = Math.floor(currentClosestRank * 0.17 + 143);
-    targetRank = currentClosestRank - offset;
+    targetRank = Math.floor(currentClosestRank * 0.5);
   }
 
   if (targetRank < 1) targetRank = 1;
   if (targetRank >= currentClosestRank) targetRank = currentClosestRank - 1;
 
-  let computedIndex = state.targetIndex - (targetRank - 1);
-  if (computedIndex < 0) {
-    computedIndex = state.targetIndex + (targetRank - 1);
-  }
-  if (computedIndex >= state.wordbank.length) {
-    computedIndex = Math.floor(Math.random() * state.wordbank.length);
-  }
+  // Extract valid unused unique word based on destination rank target
+  let hintWord = "";
+  let finalRank = targetRank;
 
-  let hintWord = state.wordbank[computedIndex];
-  // BUG FIX: Parse root variations immediately to pass structural protection guard checks
-  let parsedHintRoot = determineRootWord(hintWord);
-  const targetRoot = determineRootWord(state.targetWord);
-
-  let uniqueFound =
-    !state.guesses.some((g) => g.word === parsedHintRoot) &&
-    parsedHintRoot !== targetRoot;
-  let safetyCounter = 0;
-
-  while (!uniqueFound && safetyCounter < 100) {
-    computedIndex = Math.floor(Math.random() * state.wordbank.length);
-    hintWord = state.wordbank[computedIndex];
-    parsedHintRoot = determineRootWord(hintWord);
-    uniqueFound =
-      !state.guesses.some((g) => g.word === parsedHintRoot) &&
-      parsedHintRoot !== targetRoot;
-    safetyCounter++;
+  for (const [word, rank] of wordRankMap.entries()) {
+    if (rank === targetRank) {
+      hintWord = word;
+      break;
+    }
   }
 
-  const finalRank = Math.abs(computedIndex - state.targetIndex) + 1;
+  // Scan adjacent positions if preferred targeted word choice has already been tracked
+  let scanOffset = 1;
+  while (
+    (!hintWord || state.guesses.some((g) => g.word === hintWord)) &&
+    scanOffset < 100
+  ) {
+    let checkRank = targetRank + scanOffset;
+    for (const [word, rank] of wordRankMap.entries()) {
+      if (rank === checkRank) {
+        hintWord = word;
+        finalRank = checkRank;
+        break;
+      }
+    }
+    if (hintWord && !state.guesses.some((g) => g.word === hintWord)) break;
+
+    checkRank = targetRank - scanOffset;
+    if (checkRank >= 1) {
+      for (const [word, rank] of wordRankMap.entries()) {
+        if (rank === checkRank) {
+          hintWord = word;
+          finalRank = checkRank;
+          break;
+        }
+      }
+    }
+    scanOffset++;
+  }
+
+  if (!hintWord || finalRank === 1) {
+    hintWord = state.targetWord;
+    finalRank = 1;
+  }
 
   const hintGuess: Guess = {
-    word: parsedHintRoot,
+    word: hintWord,
     rank: finalRank,
     timestamp: Date.now(),
     isHint: true,
@@ -372,19 +365,13 @@ function handleGetHint(): void {
   state.latestGuess = hintGuess;
 
   renderGame();
+  checkWinCondition(); // Constant Checker ensures overlay runs if hint hits #1
 }
 
 function handleGiveUp(): void {
   menuOptions.classList.add("hidden");
   if (state.isGameOver) return;
-
-  state.isGameOver = true;
-  hintDisplayContainer.innerHTML = `
-    <div class="hint-banner reveal-banner">
-      🏳️ Surrendered! The word was <strong>"${state.targetWord}"</strong> (#1).
-    </div>
-  `;
-  guessInput.disabled = true;
+  triggerEndGameOverlay(false);
 }
 
 function handleGuessSubmit(event: Event): void {
@@ -409,11 +396,7 @@ function handleGuessSubmit(event: Event): void {
     return;
   }
 
-  const wordIndex = wordRankMap.get(rawWord)!;
-  const computedRank =
-    rawWord === state.targetWord
-      ? 1
-      : Math.abs(wordIndex - state.targetIndex) + 1;
+  const computedRank = wordRankMap.get(rawWord)!;
 
   const alreadyGuessed = state.guesses.some((g) => g.word === rawWord);
   if (alreadyGuessed) {
@@ -440,22 +423,36 @@ function handleGuessSubmit(event: Event): void {
   state.latestGuess = newGuess;
   guessInput.value = "";
 
-  if (computedRank === 1) {
-    setTimeout(() => triggerVictoryOverlay(), 250);
-  }
-
   renderGame();
+  checkWinCondition(); // Constant win verification execution block
 }
 
+// Global UI Form & Interactivity Bindings
 guessForm.addEventListener("submit", handleGuessSubmit);
+
 menuToggleBtn.addEventListener("click", (e) => {
   e.stopPropagation();
   menuOptions.classList.toggle("hidden");
 });
-document.addEventListener("click", () => {
-  menuOptions.classList.add("hidden");
+
+document.addEventListener("click", (e) => {
+  if (!menuToggleBtn.contains(e.target as Node)) {
+    menuOptions.classList.add("hidden");
+  }
 });
+
 hintBtn.addEventListener("click", handleGetHint);
 giveupBtn.addEventListener("click", handleGiveUp);
 
+// Wire up replay and close modal windows safely
+document.getElementById("modal-replay-btn")?.addEventListener("click", () => {
+  document.getElementById("game-modal")?.classList.add("hidden");
+  startNewGameRound();
+});
+
+document.getElementById("modal-close-btn")?.addEventListener("click", () => {
+  document.getElementById("game-modal")?.classList.add("hidden");
+});
+
+// App Initiation
 initGameEngine();

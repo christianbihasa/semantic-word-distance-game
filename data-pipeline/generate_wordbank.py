@@ -1,8 +1,15 @@
 import os
 import json
 import urllib.request
+import re
+import nltk
 import numpy as np
 from scipy.spatial import distance
+from nltk.corpus import words
+
+# Download the unified english vocabulary list if not already present
+nltk.download('words', quiet=True)
+VALID_ENGLISH_WORDS = set(w.lower() for w in words.words())
 
 # Configuration
 TARGET_WORD = "apple"
@@ -17,9 +24,39 @@ VECTOR_MIRRORS = [
 
 OUTPUT_PATH = os.path.join("..", "frontend", "src", "wordbank.json")
 
+
+def is_valid_game_word(word: str) -> bool:
+    """
+    Returns True if the word meets core structural and syntactic game parameters.
+    Filters out typos, proper nouns, brands, and compound hyphenations.
+    """
+    # 1. Reject words with symbols, spaces, numbers, or dashes
+    if not re.match(r"^[a-z]+$", word):
+        return False
+        
+    # 2. Reject extremely short fragments or unplayable word lengths
+    if len(word) < 3 or len(word) > 12:
+        return False
+
+    # 3. Structural Spelling Check: Filter out raw vector typos (like 'machin')
+    if word not in VALID_ENGLISH_WORDS:
+        return False
+
+    # 4. Filter Proper Nouns / Commercial Brands
+    blacklist_brands = {
+        "google", "microsoft", "apple", "facebook", "sony", "netflix", "amazon", 
+        "warner", "disney", "coca", "pepsi", "intel", "nvidia", "adobe", "iphone"
+    }
+    # Defensive check: Do not filter out the target word itself even if it's a brand name
+    if word in blacklist_brands and word != TARGET_WORD:
+        return False
+
+    return True
+
+
 def generate_procedural_fallback(master_vocab):
     print("\n⚠️ Activating internal high-fidelity semantic simulation engine...")
-    print("🧱 Building synthetic proximity mapping across all 370k+ verified dictionary terms...")
+    print("🧱 Building synthetic proximity mapping across all verified terms...")
     
     # Highly correlated core concepts to guarantee a realistic proximity curve at the top ranks
     curated_high_proximity = [
@@ -34,7 +71,7 @@ def generate_procedural_fallback(master_vocab):
     core_ordered = [w for w in curated_high_proximity if w in master_vocab]
     core_set = set(core_ordered)
     
-    # Grab all remaining 370k words alphabetically to act as the peripheral boundary layers
+    # Grab all remaining words alphabetically to act as the peripheral boundary layers
     peripheral_words = sorted([w for w in master_vocab if w not in core_set])
     
     final_list = core_ordered + peripheral_words
@@ -44,15 +81,22 @@ def generate_procedural_fallback(master_vocab):
     
     return final_list
 
+
 def build_mega_wordbank():
-    print("📝 Phase 1: Ingesting 479k words from dwyl/english-words repository...")
+    print(" Osiris Ingestion — Phase 1: Downloading words from dictionary repository...")
     try:
         req_dict = urllib.request.Request(DICTIONARY_URL, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(req_dict, timeout=15) as response:
             all_raw_words = response.read().decode('utf-8').splitlines()
         
-        master_vocab = {word.strip().lower() for word in all_raw_words if word.strip().isalpha()}
-        print(f"✅ Success! Ingested {len(master_vocab)} unique baseline dictionary entries.")
+        # Apply strict syntactic and nltk dictionary parameter filtering on ingestion
+        master_vocab = set()
+        for raw_w in all_raw_words:
+            processed_word = raw_w.strip().lower()
+            if is_valid_game_word(processed_word):
+                master_vocab.add(processed_word)
+                
+        print(f"✅ Success! Filtered down to {len(master_vocab)} clean game-ready baseline definitions.")
     except Exception as e:
         print(f"❌ Failed to download master vocabulary file: {e}")
         print("Aborting pipeline generation.")
@@ -128,6 +172,7 @@ def build_mega_wordbank():
         json.dump(final_wordbank, f, ensure_ascii=False)
 
     print(f"🎉 Complete! Wordbank successfully built with {len(final_wordbank)} verified items.")
+
 
 if __name__ == "__main__":
     build_mega_wordbank()
