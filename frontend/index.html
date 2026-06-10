@@ -2,12 +2,52 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>Hot or Cold Word Game</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <header>
+        <h1>Hot or Cold Word Game</h1>
+        <p>Guess the secret word based on contextual meaning.</p>
+      </header>
+
+      <main class="game-container">
+        <form id="guess-form" autocomplete="off">
+          <input
+            type="text"
+            id="guess-input"
+            placeholder="Type a word..."
+            required
+            autofocus
+          />
+          <button type="submit">Guess</button>
+        </form>
+
+        <div id="latest-guess-container"></div>
+
+        <div class="control-bar">
+          <span id="guess-count">Guesses: 0</span>
+
+          <div class="menu-dropdown">
+            <button type="button" id="menu-toggle-btn" class="menu-btn">
+              Options ▾
+            </button>
+            <div id="menu-options" class="dropdown-content hidden">
+              <button type="button" id="hint-btn">Get Hint</button>
+              <button type="button" id="giveup-btn" class="danger-btn">
+                Give Up
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div id="hint-display-container"></div>
+
+        <div id="guess-list" class="guess-list"></div>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
