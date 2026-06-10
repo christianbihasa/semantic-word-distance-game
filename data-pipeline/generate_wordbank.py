@@ -168,8 +168,10 @@ def build_mega_wordbank():
     print(f"\n💾 Phase 5: Exporting full structural database to frontend assets...")
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     
+    # Pre-format as object for direct browser consumption: {word: rank}
+    final_data = {word: rank for rank, word in enumerate(final_wordbank, 1)}
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(final_wordbank, f, ensure_ascii=False)
+        json.dump(final_data, f, ensure_ascii=False)
 
     print(f"🎉 Complete! Wordbank successfully built with {len(final_wordbank)} verified items.")
 
