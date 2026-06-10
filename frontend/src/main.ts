@@ -1,4 +1,4 @@
-import confetti from "canvas-confetti"; // Ensure your package import matches your setup
+import confetti from "canvas-confetti";
 
 interface Guess {
   word: string;
@@ -9,6 +9,7 @@ interface Guess {
 
 interface GameState {
   targetWord: string;
+  targetIndex: number;
   wordbank: string[];
   guesses: Guess[];
   latestGuess: Guess | null;
@@ -17,6 +18,7 @@ interface GameState {
 
 const state: GameState = {
   targetWord: "",
+  targetIndex: -1,
   wordbank: [],
   guesses: [],
   latestGuess: null,
@@ -25,7 +27,7 @@ const state: GameState = {
 
 const wordRankMap = new Map<string, number>();
 
-// DOM Query Elements Cache
+// DOM Elements Cache
 const guessForm = document.getElementById("guess-form") as HTMLFormElement;
 const guessInput = document.getElementById("guess-input") as HTMLInputElement;
 const guessCounterBadge = document.getElementById(
@@ -40,6 +42,7 @@ const latestGuessContainer = document.getElementById(
 const hintDisplayContainer = document.getElementById(
   "hint-display-container",
 ) as HTMLDivElement;
+const guessDivider = document.getElementById("guess-divider") as HTMLHRElement;
 
 const menuToggleBtn = document.getElementById(
   "menu-toggle-btn",
@@ -48,13 +51,14 @@ const menuOptions = document.getElementById("menu-options") as HTMLDivElement;
 const hintBtn = document.getElementById("hint-btn") as HTMLButtonElement;
 const giveupBtn = document.getElementById("giveup-btn") as HTMLButtonElement;
 
-function getTierClass(rank: number): "green" | "yellow" | "red" {
-  if (rank >= 1 && rank <= 100) return "green";
-  if (rank >= 101 && rank <= 500) return "yellow";
-  return "red";
+// Normalized Temperature Scale Assignment Mapping
+function getTierClass(rank: number): "hot" | "warm" | "cold" {
+  if (rank === 1 || (rank >= 2 && rank <= 75)) return "hot";
+  if (rank >= 76 && rank <= 300) return "warm";
+  return "cold";
 }
 
-// Morphological Root Parser
+// Suffix Parsing Normalization Rule Engine
 function determineRootWord(word: string): string {
   const irregularPlurals: { [key: string]: string } = {
     leaves: "leaf",
@@ -156,7 +160,7 @@ async function initGameEngine() {
     });
 
     console.log(
-      `🚀 Game Engine active with ${state.wordbank.length.toLocaleString()} words.`,
+      `🚀 Heat Seek engine active with ${state.wordbank.length.toLocaleString()} words.`,
     );
     startNewGameRound();
   } catch (error) {
@@ -168,8 +172,10 @@ async function initGameEngine() {
 function startNewGameRound(): void {
   if (state.wordbank.length === 0) return;
 
-  // FIX: Synced target word directly to Rank #1 (Index 0) from your generated wordbank pipeline
-  state.targetWord = state.wordbank[0];
+  state.targetIndex = Math.floor(
+    Math.random() * Math.min(150, state.wordbank.length),
+  );
+  state.targetWord = state.wordbank[state.targetIndex];
 
   state.guesses = [];
   state.latestGuess = null;
@@ -186,14 +192,16 @@ function renderGame(): void {
   guessCounterBadge.textContent = `#${state.guesses.length + 1}`;
 
   const cardElement =
-    guessForm.closest(".game-card") || guessForm.parentElement;
+    guessForm.closest(".game-container") || guessForm.parentElement;
   if (cardElement) {
     if (state.guesses.length === 0) {
       cardElement.classList.add("game-card-empty");
       guessListContainer.style.display = "none";
+      guessDivider.classList.add("hidden");
     } else {
       cardElement.classList.remove("game-card-empty");
       guessListContainer.style.display = "flex";
+      guessDivider.classList.remove("hidden");
     }
   }
 
@@ -223,9 +231,9 @@ function renderGame(): void {
 
     row.className = `guess-row ${tier}`;
     row.innerHTML = `
-      <div class="word-wrapper" style="display: flex; align-items: center; gap: 0.35rem;">
+      <div class="word-wrapper">
         ${isTargetLatest ? '<span class="arrow-indicator">➔</span>' : ""}
-        ${guess.isHint ? '<span class="hint-bulb-icon" style="margin-right: 0.15rem; font-size: 0.95rem;">💡</span>' : ""}
+        ${guess.isHint ? '<span class="hint-bulb-icon">💡</span>' : ""}
         <span class="word-text">${guess.word}</span>
       </div>
       <span class="rank-value">#${guess.rank}</span>
@@ -237,10 +245,7 @@ function renderGame(): void {
 function triggerVictoryOverlay(): void {
   state.isGameOver = true;
   guessInput.disabled = true;
-
-  if (typeof confetti === "function") {
-    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
-  }
+  confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
 
   const hintsUsedCount = state.guesses.filter((g) => g.isHint).length;
   const directGuessesCount = state.guesses.length - hintsUsedCount;
@@ -251,9 +256,9 @@ function triggerVictoryOverlay(): void {
 
   modalOverlay.innerHTML = `
     <div class="win-modal-card">
-      <div class="win-modal-header">You Won!</div>
+      <div class="win-modal-header">Target Acquired!</div>
       <div class="win-modal-body">
-        <span class="modal-word-label">THE WORD WAS</span>
+        <span class="modal-word-label">THE SECRET WORD WAS</span>
         <div class="modal-word-reveal">${state.targetWord.toUpperCase()}</div>
         <div class="modal-stats-grid">
           <div class="modal-stat-box">
@@ -326,28 +331,45 @@ function handleGetHint(): void {
   if (targetRank < 1) targetRank = 1;
   if (targetRank >= currentClosestRank) targetRank = currentClosestRank - 1;
 
-  let hintWord = state.wordbank[targetRank - 1];
-
-  let uniqueFound = !state.guesses.some((g) => g.word === hintWord);
-  while (!uniqueFound && targetRank > 1) {
-    targetRank--;
-    hintWord = state.wordbank[targetRank - 1];
-    uniqueFound = !state.guesses.some((g) => g.word === hintWord);
+  let computedIndex = state.targetIndex - (targetRank - 1);
+  if (computedIndex < 0) {
+    computedIndex = state.targetIndex + (targetRank - 1);
+  }
+  if (computedIndex >= state.wordbank.length) {
+    computedIndex = Math.floor(Math.random() * state.wordbank.length);
   }
 
+  let hintWord = state.wordbank[computedIndex];
+  // BUG FIX: Parse root variations immediately to pass structural protection guard checks
+  let parsedHintRoot = determineRootWord(hintWord);
+  const targetRoot = determineRootWord(state.targetWord);
+
+  let uniqueFound =
+    !state.guesses.some((g) => g.word === parsedHintRoot) &&
+    parsedHintRoot !== targetRoot;
+  let safetyCounter = 0;
+
+  while (!uniqueFound && safetyCounter < 100) {
+    computedIndex = Math.floor(Math.random() * state.wordbank.length);
+    hintWord = state.wordbank[computedIndex];
+    parsedHintRoot = determineRootWord(hintWord);
+    uniqueFound =
+      !state.guesses.some((g) => g.word === parsedHintRoot) &&
+      parsedHintRoot !== targetRoot;
+    safetyCounter++;
+  }
+
+  const finalRank = Math.abs(computedIndex - state.targetIndex) + 1;
+
   const hintGuess: Guess = {
-    word: hintWord,
-    rank: targetRank,
+    word: parsedHintRoot,
+    rank: finalRank,
     timestamp: Date.now(),
     isHint: true,
   };
 
   state.guesses.push(hintGuess);
   state.latestGuess = hintGuess;
-
-  if (targetRank === 1) {
-    setTimeout(() => triggerVictoryOverlay(), 250);
-  }
 
   renderGame();
 }
@@ -359,7 +381,7 @@ function handleGiveUp(): void {
   state.isGameOver = true;
   hintDisplayContainer.innerHTML = `
     <div class="hint-banner reveal-banner">
-      🏳️ You surrendered! The secret word was <strong>"${state.targetWord}"</strong> (#1).
+      🏳️ Surrendered! The word was <strong>"${state.targetWord}"</strong> (#1).
     </div>
   `;
   guessInput.disabled = true;
@@ -379,7 +401,7 @@ function handleGuessSubmit(event: Event): void {
       <div class="latest-guess-box warning-box animate-shake">
         <div>
           <span class="latest-label">Error</span>
-          <strong>"${inputWord}"</strong> is not in the database dictionary.
+          <strong>"${inputWord}"</strong> is not in the database.
         </div>
       </div>
     `;
@@ -388,7 +410,10 @@ function handleGuessSubmit(event: Event): void {
   }
 
   const wordIndex = wordRankMap.get(rawWord)!;
-  const computedRank = wordIndex + 1;
+  const computedRank =
+    rawWord === state.targetWord
+      ? 1
+      : Math.abs(wordIndex - state.targetIndex) + 1;
 
   const alreadyGuessed = state.guesses.some((g) => g.word === rawWord);
   if (alreadyGuessed) {
