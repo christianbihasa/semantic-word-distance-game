@@ -1,10 +1,10 @@
-import confetti from "canvas-confetti";
+import confetti from "canvas-confetti"; // Ensure your package import matches your setup
 
 interface Guess {
   word: string;
   rank: number;
   timestamp: number;
-  isHint?: boolean; // Distinguishes automated hints from organic guesses
+  isHint?: boolean;
 }
 
 interface GameState {
@@ -16,7 +16,7 @@ interface GameState {
 }
 
 const state: GameState = {
-  targetWord: "apple",
+  targetWord: "",
   wordbank: [],
   guesses: [],
   latestGuess: null,
@@ -54,7 +54,7 @@ function getTierClass(rank: number): "green" | "yellow" | "red" {
   return "red";
 }
 
-// Deep Morphological Root Parser
+// Morphological Root Parser
 function determineRootWord(word: string): string {
   const irregularPlurals: { [key: string]: string } = {
     leaves: "leaf",
@@ -166,11 +166,10 @@ async function initGameEngine() {
 }
 
 function startNewGameRound(): void {
-  // Select a random secret word from top tiers for fresh replayability
-  const randomIndex = Math.floor(
-    Math.random() * Math.min(50, state.wordbank.length),
-  );
-  state.targetWord = state.wordbank[randomIndex];
+  if (state.wordbank.length === 0) return;
+
+  // FIX: Synced target word directly to Rank #1 (Index 0) from your generated wordbank pipeline
+  state.targetWord = state.wordbank[0];
 
   state.guesses = [];
   state.latestGuess = null;
@@ -184,10 +183,8 @@ function startNewGameRound(): void {
 }
 
 function renderGame(): void {
-  // Sync Badge Counter
   guessCounterBadge.textContent = `#${state.guesses.length + 1}`;
 
-  // Balance vertical spacing layout inside card when zero items exist
   const cardElement =
     guessForm.closest(".game-card") || guessForm.parentElement;
   if (cardElement) {
@@ -226,9 +223,10 @@ function renderGame(): void {
 
     row.className = `guess-row ${tier}`;
     row.innerHTML = `
-      <div class="word-wrapper">
-        ${isTargetLatest ? '<span class="arrow-indicator">➔</span> ' : ""}
-        <span class="word-text">${guess.word} ${guess.isHint ? '<small style="opacity:0.6; font-size:0.75rem;">(Hint)</small>' : ""}</span>
+      <div class="word-wrapper" style="display: flex; align-items: center; gap: 0.35rem;">
+        ${isTargetLatest ? '<span class="arrow-indicator">➔</span>' : ""}
+        ${guess.isHint ? '<span class="hint-bulb-icon" style="margin-right: 0.15rem; font-size: 0.95rem;">💡</span>' : ""}
+        <span class="word-text">${guess.word}</span>
       </div>
       <span class="rank-value">#${guess.rank}</span>
     `;
@@ -239,12 +237,14 @@ function renderGame(): void {
 function triggerVictoryOverlay(): void {
   state.isGameOver = true;
   guessInput.disabled = true;
-  confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+
+  if (typeof confetti === "function") {
+    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+  }
 
   const hintsUsedCount = state.guesses.filter((g) => g.isHint).length;
   const directGuessesCount = state.guesses.length - hintsUsedCount;
 
-  // Append Custom Layout Modal matching project look and feel
   const modalOverlay = document.createElement("div");
   modalOverlay.className = "win-modal-overlay";
   modalOverlay.id = "victory-modal-popup";
@@ -275,7 +275,6 @@ function triggerVictoryOverlay(): void {
 
   document.body.appendChild(modalOverlay);
 
-  // Modal Event Logic
   document
     .getElementById("modal-play-again-btn")
     ?.addEventListener("click", () => {
@@ -393,7 +392,6 @@ function handleGuessSubmit(event: Event): void {
 
   const alreadyGuessed = state.guesses.some((g) => g.word === rawWord);
   if (alreadyGuessed) {
-    // Elegant native Alert box replacement rule injection
     latestGuessContainer.innerHTML = `
       <div class="latest-guess-box warning-box animate-shake">
         <div>
