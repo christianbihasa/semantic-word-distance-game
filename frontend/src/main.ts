@@ -54,10 +54,11 @@ const giveupBtn = document.getElementById("giveup-btn") as HTMLButtonElement;
 
 // Persistence / Caching keys and constants
 const STORAGE_KEY = "heat_seek_session_state";
-const WORD_BANK_VERSION_KEY = "heat_seek_wordbank_version";
 const IDB_DB_NAME = "heat_seek_engine";
 const IDB_STORE_NAME = "vocab_store";
-const IDB_VOCAB_KEY = "wordRankData";
+// (No legacy full-vocab key; using per-target topk keys)
+const TOPK_IDB_KEY_PREFIX = "topk:";
+const TARGETS_JSON_PATH = "/topk/targets.json";
 
 // --- Session Persistence Helpers (LocalStorage) ---
 function saveSessionToStorage(): void {
@@ -109,73 +110,69 @@ function openIDB(): Promise<IDBDatabase> {
   });
 }
 
-async function saveVocabularyToIDB(wordRankData: Record<string, number>, version: string) {
-  const db = await openIDB();
-  const tx = db.transaction(IDB_STORE_NAME, "readwrite");
-  const store = tx.objectStore(IDB_STORE_NAME);
-  store.put({ version, data: wordRankData }, IDB_VOCAB_KEY);
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve(true);
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function getVocabularyFromIDB(): Promise<{version: string; data: Record<string, number>} | null> {
-  const db = await openIDB();
-  const tx = db.transaction(IDB_STORE_NAME, "readonly");
-  const store = tx.objectStore(IDB_STORE_NAME);
-  const req = store.get(IDB_VOCAB_KEY);
-  return new Promise((resolve) => {
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => resolve(null);
-  });
-}
+// Legacy full vocabulary helpers removed — per-target top-K caching is used instead.
 
 // (No explicit delete helper needed currently)
 
-async function fetchVocabularyWithCache(): Promise<Record<string, number>> {
-  // Attempt: 1) Check IDB for cached vocab + version; 2) Validate version against localStorage; 3) If mismatch or miss => fetch network, store to IDB + version
+// Note: legacy full-vocab caching removed in favor of per-target top-K caching.
+
+// Note: hydrateWordRankMap removed; use per-target hydrateTopkForTarget instead.
+
+function hydrateTopkForTarget(target: string, entries: Array<{w: string; s?: number;}>) {
+  wordRankMap.clear();
+  const bank: string[] = [];
+  const t = target.trim().toLowerCase();
+  // target is rank 1
+  wordRankMap.set(t, 1);
+  bank.push(t);
+  entries.forEach((it, idx) => {
+    const w = (it.w || '').trim().toLowerCase();
+    if (!w) return;
+    const rank = idx + 2; // neighbors start from 2
+    wordRankMap.set(w, rank);
+    bank.push(w);
+  });
+  state.wordbank = bank;
+}
+
+// --- Per-target Top-K IDB helpers ---
+async function getTopkFromIDB(target: string): Promise<{version?: string; data?: any} | null> {
   try {
-    const cached = await getVocabularyFromIDB();
-    const localVersion = localStorage.getItem(WORD_BANK_VERSION_KEY);
-
-    if (cached && cached.version && localVersion === cached.version) {
-      return cached.data;
-    }
-
-    // Otherwise fetch from network
-    const resp = await fetch("/src/wordbank.json");
-    if (!resp.ok) throw new Error("Failed to fetch wordbank.json");
-    const data = await resp.json();
-
-    // Determine version if provided by file; fallback to timestamp
-    const detectedVersion = (data && data.wordbank_version) || `${Date.now()}`;
-
-    // If the file includes a version field, prefer it; else use timestamp
-    const toStoreData: Record<string, number> = data;
-    await saveVocabularyToIDB(toStoreData, detectedVersion);
-    try {
-      localStorage.setItem(WORD_BANK_VERSION_KEY, detectedVersion);
-    } catch (e) {
-      console.warn("Failed to persist wordbank version:", e);
-    }
-
-    return toStoreData;
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE_NAME, "readonly");
+    const store = tx.objectStore(IDB_STORE_NAME);
+    const req = store.get(TOPK_IDB_KEY_PREFIX + target);
+    return await new Promise((resolve) => {
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    });
   } catch (e) {
-    console.warn("Vocabulary cache failed, falling back to network:", e);
-    // As a last resort, try direct fetch again
-    const resp = await fetch("/src/wordbank.json");
-    if (!resp.ok) throw new Error("Failed to fetch wordbank.json");
-    return resp.json();
+    console.warn("getTopkFromIDB failed", e);
+    return null;
   }
 }
 
-function hydrateWordRankMap(rawData: Record<string, number>) {
-  wordRankMap.clear();
-  Object.entries(rawData).forEach(([word, rank]) => {
-    wordRankMap.set(word, rank as number);
-  });
-  state.wordbank = Array.from(wordRankMap.keys());
+async function saveTopkToIDB(target: string, data: any, version?: string) {
+  try {
+    const db = await openIDB();
+    const tx = db.transaction(IDB_STORE_NAME, "readwrite");
+    const store = tx.objectStore(IDB_STORE_NAME);
+    store.put({ version: version || `${Date.now()}`, data }, TOPK_IDB_KEY_PREFIX + target);
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn("saveTopkToIDB failed", e);
+  }
+}
+
+async function fetchTargetsList(): Promise<string[]> {
+  const resp = await fetch(TARGETS_JSON_PATH);
+  if (!resp.ok) throw new Error("Failed to load targets.json");
+  const list = await resp.json();
+  // list expected to be array of target words
+  return list;
 }
 
 // Temperature Color Grading
@@ -252,35 +249,70 @@ async function initGameEngine() {
   try {
     hintDisplayContainer.innerHTML = "Initializing engine...";
 
-    // 1) Load vocabulary from IndexedDB cache or network
-    const rawData = await fetchVocabularyWithCache();
-    hydrateWordRankMap(rawData as Record<string, number>);
-
-    console.log(
-      `🚀 Heat Seek engine active with ${state.wordbank.length.toLocaleString()} words.`,
-    );
-
-    // 2) Restore any in-progress session from localStorage
+    // 1) Load targets list and pick target (respect saved session if present)
     const saved = loadSessionFromStorage();
-    if (saved && saved.targetWord) {
-      state.targetWord = saved.targetWord;
-      state.guesses = saved.guesses || [];
-      state.latestGuess = saved.latestGuess || null;
-      state.isGameOver = Boolean(saved.isGameOver);
-
-      // Clear loading UI and re-render restored game state
-      hintDisplayContainer.innerHTML = "";
-      renderGame();
-
-      if (state.isGameOver) {
-        // Re-evaluate win condition to show modal correctly
-        triggerEndGameOverlay(state.guesses.some((g) => g.rank === 1));
+    let chosenTarget: string | null = null;
+    try {
+      const targets = await fetchTargetsList();
+      if (saved && saved.targetWord && targets.includes(saved.targetWord)) {
+        chosenTarget = saved.targetWord;
+      } else {
+        // pick random target from list
+        chosenTarget = targets[Math.floor(Math.random() * targets.length)];
       }
-    } else {
-      // No saved session: start fresh
-      hintDisplayContainer.innerHTML = "";
-      startNewGameRound();
+    } catch (e) {
+      console.warn("Failed to fetch targets list, falling back to saved session or aborting", e);
+      if (saved && saved.targetWord) chosenTarget = saved.targetWord;
     }
+
+    if (!chosenTarget) throw new Error("No target available to initialize engine");
+    state.targetWord = chosenTarget;
+
+    // 2) Try to load top-K for target from IDB
+    const cachedTopk = await getTopkFromIDB(chosenTarget);
+    if (cachedTopk && cachedTopk.data) {
+      // hydrate from cached data immediately
+      hydrateTopkForTarget(chosenTarget, cachedTopk.data);
+      hintDisplayContainer.innerHTML = "";
+      // restore session if present
+      if (saved && saved.targetWord === chosenTarget) {
+        state.guesses = saved.guesses || [];
+        state.latestGuess = saved.latestGuess || null;
+        state.isGameOver = Boolean(saved.isGameOver);
+        renderGame();
+        if (state.isGameOver) triggerEndGameOverlay(state.guesses.some((g) => g.rank === 1));
+      } else {
+        startNewGameRound();
+      }
+      return;
+    }
+
+    // 3) If not cached, spawn worker to fetch and parse top-K JSON
+    const worker = new Worker(new URL("./worker-topk.ts", import.meta.url), { type: "module" });
+    worker.postMessage({ target: chosenTarget, url: `/topk/${chosenTarget}.json` });
+    worker.onmessage = async (e) => {
+      const entries = e.data?.entries || [];
+      // Persist and hydrate
+      await saveTopkToIDB(chosenTarget, entries);
+      hydrateTopkForTarget(chosenTarget, entries);
+      hintDisplayContainer.innerHTML = "";
+
+      if (saved && saved.targetWord === chosenTarget) {
+        state.guesses = saved.guesses || [];
+        state.latestGuess = saved.latestGuess || null;
+        state.isGameOver = Boolean(saved.isGameOver);
+        renderGame();
+        if (state.isGameOver) triggerEndGameOverlay(state.guesses.some((g) => g.rank === 1));
+      } else {
+        startNewGameRound();
+      }
+      worker.terminate();
+    };
+    worker.onerror = (err) => {
+      console.error("Top-K worker failed:", err);
+      hintDisplayContainer.innerHTML = `<div class=\"hint-banner reveal-banner\">⚠️ Failed to load target payload.</div>`;
+      worker.terminate();
+    };
   } catch (error) {
     console.error("Engine Init Failure:", error);
     hintDisplayContainer.innerHTML = `<div class="hint-banner reveal-banner">⚠️ System initialization failure.</div>`;
@@ -291,34 +323,14 @@ function startNewGameRound(): void {
   // Clear any previous session so replay starts fresh
   clearSessionStorage();
   if (state.wordbank.length === 0) return;
+  // With precomputed top-K payloads, the first element is the secret target
+  state.targetIndex = 0;
+  state.targetWord = state.wordbank[0].trim().toLowerCase();
 
-  // 1. Establish targeted secret word index
-  state.targetIndex = Math.floor(
-    Math.random() * Math.min(150, state.wordbank.length),
-  );
-  state.targetWord = state.wordbank[state.targetIndex].trim().toLowerCase();
-
-  // 2. Clear old mappings and sort entire wordbank relative to target index to prevent duplicate ranks
+  // Create rank mapping directly from precomputed order (target -> #1)
   wordRankMap.clear();
-
-  const mappedBank = state.wordbank.map((word) => {
-    const cleanWord = word.trim().toLowerCase();
-    const originalIdx = state.wordbank.indexOf(word);
-    return {
-      word: cleanWord,
-      distance: Math.abs(originalIdx - state.targetIndex),
-    };
-  });
-
-  // Sort ascending by distance. If tied, sort alphabetically to guarantee strict non-duplicate rank ordering
-  mappedBank.sort((a, b) => {
-    if (a.distance !== b.distance) return a.distance - b.distance;
-    return a.word.localeCompare(b.word);
-  });
-
-  // Assign linear unique sequential sequential ranks starting from #1
-  mappedBank.forEach((item, index) => {
-    wordRankMap.set(item.word, index + 1);
+  state.wordbank.forEach((w, i) => {
+    wordRankMap.set(w.trim().toLowerCase(), i + 1);
   });
 
   // 3. Reset Game States
