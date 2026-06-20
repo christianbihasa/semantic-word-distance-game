@@ -2,10 +2,6 @@ import os
 import json
 import argparse
 from annoy import AnnoyIndex
-import os
-import json
-import argparse
-from annoy import AnnoyIndex
 from multiprocessing import Pool
 from functools import partial
 
@@ -19,7 +15,6 @@ def load_index_meta(prefix=os.path.join(ARTIFACTS_DIR, "annoy_index")):
         words = json.load(f)
     with open(f"{prefix}_meta.json", "r", encoding="utf-8") as f:
         meta = json.load(f)
-    DIM = meta.get("dim")
     return prefix, words, meta
 
 
@@ -36,13 +31,12 @@ def _init_worker(prefix, dim):
     _ANN_DIM = dim
     _ANN_INDEX = AnnoyIndex(_ANN_DIM, 'angular')
     _ANN_INDEX.load(f"{prefix}.ann")
-    # load words list once per worker
     with open(f"{prefix}_words.json", "r", encoding="utf-8") as f:
         _ANN_WORDS = json.load(f)
 
 
-def _process_target(idx, k, output_format, out_dir, wordbank_version=None):
-    # uses global _ANN_INDEX and _ANN_WORDS
+def _process_target(idx, k, out_dir, wordbank_version=None):
+    """Compute top-K neighbors with true cosine similarity scores."""
     global _ANN_INDEX, _ANN_WORDS
     if _ANN_INDEX is None or _ANN_WORDS is None:
         raise RuntimeError("Worker not initialized with ANN index")
@@ -52,52 +46,40 @@ def _process_target(idx, k, output_format, out_dir, wordbank_version=None):
     for nid, dist in zip(nns, dists):
         if nid == idx:
             continue
-        # convert distance (angular/cosine) to similarity-like score
-        score = max(0.0, 1.0 - dist)
-        paired.append((_ANN_WORDS[nid], float(score)))
+        # Annoy angular distance: dist = sqrt(2 * (1 - cos_sim))
+        # Therefore: cos_sim = 1 - dist^2 / 2
+        cos_sim = max(0.0, 1.0 - (dist * dist) / 2.0)
+        # Round to 4 decimal places for compact output
+        paired.append([_ANN_WORDS[nid], round(cos_sim, 4)])
         if len(paired) >= k:
             break
 
     target_word = _ANN_WORDS[idx]
     out_path = os.path.join(out_dir, f"{target_word}.json")
-    # write with metadata
-    if output_format == 'words':
-        payload = {
-            "wordbank_version": wordbank_version or f"v{int(os.path.getmtime(f'{_ANN_PREFIX}.ann'))}",
-            "entries": [w for w, s in paired]
-        }
-    else:
-        payload = {
-            "wordbank_version": wordbank_version or f"v{int(os.path.getmtime(f'{_ANN_PREFIX}.ann'))}",
-            "entries": [{"w": w, "s": s} for w, s in paired]
-        }
 
+    # Compact array-of-arrays format: [[word, score], ...]
     with open(out_path, 'w', encoding='utf-8') as f:
-        json.dump(payload, f, ensure_ascii=False)
+        json.dump(paired, f, ensure_ascii=False, separators=(',', ':'))
 
     return target_word
 
 
-def compute_topk_parallel(prefix, words, meta, k=200, pool_indices=None, out_dir=OUT_DIR, workers=4, output_format='scores', wordbank_version=None):
+def compute_topk_parallel(prefix, words, meta, k=200, pool_indices=None, out_dir=OUT_DIR, workers=4, wordbank_version=None):
     if pool_indices is None:
         pool_indices = list(range(len(words)))
 
     print(f"Computing top-{k} for {len(pool_indices)} targets using {workers} workers...")
 
-    # start pool with initializer to avoid reloading index per task
     init = partial(_init_worker, prefix, meta.get('dim'))
     with Pool(processes=workers, initializer=init) as p:
-        func = partial(_process_target, k=k, output_format=output_format, out_dir=out_dir, wordbank_version=wordbank_version)
-        # map returns list of target words that were written
+        func = partial(_process_target, k=k, out_dir=out_dir, wordbank_version=wordbank_version)
         results = p.map(func, pool_indices)
 
-    # write targets.json with version
-    targets_meta = {"wordbank_version": wordbank_version or str(int(os.path.getmtime(f"{prefix}.ann"))),
-                    "targets": results}
+    # Write targets.json as flat array
     with open(os.path.join(out_dir, "targets.json"), "w", encoding='utf-8') as f:
-        json.dump(targets_meta, f, ensure_ascii=False)
+        json.dump(results, f, ensure_ascii=False, separators=(',', ':'))
 
-    print("Top-K computation complete.")
+    print(f"Top-K computation complete. {len(results)} targets written.")
 
 
 if __name__ == "__main__":
@@ -107,7 +89,6 @@ if __name__ == "__main__":
     parser.add_argument("--pool-mode", choices=["random", "frequency", "all"], default="random", help="How to select targets from index")
     parser.add_argument("--freq-file", type=str, default=None, help="Optional JSON file mapping word->frequency for frequency-based selection")
     parser.add_argument("--workers", type=int, default=max(1, os.cpu_count() or 4), help="Number of parallel worker processes")
-    parser.add_argument("--output-format", choices=["scores", "words"], default="scores", help="Output entries as objects with scores or words-only")
     parser.add_argument("--version", type=str, default=None, help="Explicit wordbank_version to inject into outputs")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--prefix", type=str, default=os.path.join(ARTIFACTS_DIR, "annoy_index"), help="Annoy index prefix path")
@@ -124,14 +105,12 @@ if __name__ == "__main__":
     elif args.pool_mode == 'frequency' and args.freq_file:
         with open(args.freq_file, 'r', encoding='utf-8') as f:
             freq = json.load(f)
-        # sort words by provided frequency descending and choose top N
         sorted_words = sorted([(i, freq.get(w, 0)) for i, w in enumerate(words)], key=lambda x: -x[1])
         pool = [i for i, _ in sorted_words[: args.pool_size or len(words)]]
     else:
-        # random sample
         if args.pool_size == 0:
             pool = list(range(len(words)))
         else:
             pool = random.sample(range(len(words)), min(args.pool_size, len(words)))
 
-    compute_topk_parallel(prefix, words, meta, k=args.k, pool_indices=pool, out_dir=OUT_DIR, workers=args.workers, output_format=args.output_format, wordbank_version=args.version)
+    compute_topk_parallel(prefix, words, meta, k=args.k, pool_indices=pool, out_dir=OUT_DIR, workers=args.workers, wordbank_version=args.version)
