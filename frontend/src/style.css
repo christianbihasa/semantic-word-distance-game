@@ -199,6 +199,10 @@ header p {
   display: none !important;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 /* Layout Splitter and Panels */
 #latest-guess-container {
   margin-top: 1.25rem;
@@ -533,5 +537,15 @@ header p {
   to {
     transform: translateY(0);
     opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

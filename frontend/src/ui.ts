@@ -16,11 +16,12 @@ const elements = {
   latestGuessContainer: document.getElementById("latest-guess-container") as HTMLDivElement,
   hintDisplayContainer: document.getElementById("hint-display-container") as HTMLDivElement,
   guessDivider: document.getElementById("guess-divider") as HTMLHRElement,
-  
+
   menuToggleBtn: document.getElementById("menu-toggle-btn") as HTMLButtonElement,
   menuOptions: document.getElementById("menu-options") as HTMLDivElement,
   hintBtn: document.getElementById("hint-btn") as HTMLButtonElement,
   giveupBtn: document.getElementById("giveup-btn") as HTMLButtonElement,
+  newWordBtn: document.getElementById("newword-btn") as HTMLButtonElement,
 
   modalOverlay: document.getElementById("game-modal") as HTMLDivElement,
   modalHeader: document.getElementById("modal-header") as HTMLDivElement,
@@ -46,34 +47,64 @@ export function bindEvents(handlers: {
 
   elements.menuToggleBtn.addEventListener("click", (e) => {
     e.stopPropagation();
-    elements.menuOptions.classList.toggle("hidden");
+    setMenuOpen(elements.menuOptions.classList.contains("hidden"));
   });
 
   document.addEventListener("click", (e) => {
-    if (!elements.menuToggleBtn.contains(e.target as Node)) {
-      elements.menuOptions.classList.add("hidden");
-    }
+    if (!elements.menuToggleBtn.contains(e.target as Node)) setMenuOpen(false);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!elements.modalOverlay.classList.contains("hidden")) closeModal();
+    else setMenuOpen(false);
   });
 
   elements.hintBtn.addEventListener("click", () => {
-    elements.menuOptions.classList.add("hidden");
+    setMenuOpen(false);
     handlers.onHint();
   });
 
   elements.giveupBtn.addEventListener("click", () => {
-    elements.menuOptions.classList.add("hidden");
+    setMenuOpen(false);
     handlers.onGiveUp();
   });
 
-  elements.modalReplayBtn.addEventListener("click", () => {
-    elements.modalOverlay.classList.add("hidden");
+  elements.newWordBtn.addEventListener("click", () => {
+    setMenuOpen(false);
     handlers.onReplay();
   });
 
-  elements.modalCloseBtn.addEventListener("click", () => {
-    elements.modalOverlay.classList.add("hidden");
+  elements.modalReplayBtn.addEventListener("click", () => {
+    closeModal();
+    handlers.onReplay();
+  });
+
+  elements.modalCloseBtn.addEventListener("click", closeModal);
+
+  elements.modalOverlay.addEventListener("click", (e) => {
+    if (e.target === elements.modalOverlay) closeModal();
   });
 }
+
+function setMenuOpen(open: boolean): void {
+  elements.menuOptions.classList.toggle("hidden", !open);
+  elements.menuToggleBtn.setAttribute("aria-expanded", String(open));
+}
+
+function closeModal(): void {
+  elements.modalOverlay.classList.add("hidden");
+  elements.menuToggleBtn.focus();
+}
+
+/** In-game actions (hint, give up) vs. the post-game "New Word" action. */
+function syncMenu(isGameOver: boolean): void {
+  elements.hintBtn.hidden = isGameOver;
+  elements.giveupBtn.hidden = isGameOver;
+  elements.newWordBtn.hidden = !isGameOver;
+}
+
+const formatRank = (rank: number) => `#${rank.toLocaleString("en-US")}`;
 
 export function clearInput(): void {
   elements.guessInput.value = "";
@@ -115,6 +146,7 @@ export function showMessage(title: string, message: string, isError = false): vo
 
 export function renderGame(state: Readonly<GameState>): void {
   elements.guessCounterBadge.textContent = `#${state.guesses.length + 1}`;
+  syncMenu(state.isGameOver);
 
   const cardElement = elements.guessForm.closest(".game-container") || elements.guessForm.parentElement;
   if (cardElement) {
@@ -133,7 +165,7 @@ export function renderGame(state: Readonly<GameState>): void {
     const box = el("div", `latest-guess-box ${getTier(state.latestGuess.rank)}`);
     const label = el("div", "");
     label.append(el("span", "latest-label", "Latest Guess"), el("strong", "", state.latestGuess.word));
-    box.append(label, el("strong", "", `#${state.latestGuess.rank}`));
+    box.append(label, el("strong", "", formatRank(state.latestGuess.rank)));
     elements.latestGuessContainer.replaceChildren(box);
   } else {
     elements.latestGuessContainer.replaceChildren();
@@ -152,7 +184,7 @@ export function renderGame(state: Readonly<GameState>): void {
     }
     if (guess.isHint) wrapper.append(el("span", "hint-bulb-icon", "💡"));
     wrapper.append(el("span", "word-text", guess.word));
-    row.append(wrapper, el("span", "rank-value", `#${guess.rank}`));
+    row.append(wrapper, el("span", "rank-value", formatRank(guess.rank)));
     frag.appendChild(row);
   }
 
@@ -161,9 +193,10 @@ export function renderGame(state: Readonly<GameState>): void {
 
 export function showEndGameOverlay(state: Readonly<GameState>, isWin: boolean): void {
   setInputEnabled(false);
+  syncMenu(true);
 
   if (isWin) {
-    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+    confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, disableForReducedMotion: true });
   }
 
   const hintsUsedCount = state.guesses.filter((g) => g.isHint).length;
@@ -175,11 +208,12 @@ export function showEndGameOverlay(state: Readonly<GameState>, isWin: boolean): 
 
   if (isWin) {
     elements.modalHeader.textContent = "TARGET ACQUIRED!";
-    elements.modalHeader.style.backgroundColor = "#10b981";
+    elements.modalHeader.style.backgroundColor = "var(--heat-hot)";
   } else {
     elements.modalHeader.textContent = "MISSION ABANDONED";
-    elements.modalHeader.style.backgroundColor = "#ef4444";
+    elements.modalHeader.style.backgroundColor = "var(--heat-cold)";
   }
 
   elements.modalOverlay.classList.remove("hidden");
+  elements.modalReplayBtn.focus();
 }

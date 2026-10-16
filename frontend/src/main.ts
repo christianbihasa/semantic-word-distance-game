@@ -1,8 +1,9 @@
 import * as storage from "./storage";
 import * as engine from "./engine";
 import * as ui from "./ui";
+import type { Manifest } from "./ranking";
 
-let targets: string[] = [];
+let manifest: Manifest | null = null;
 let isLoading = false;
 
 function init() {
@@ -20,18 +21,16 @@ async function initGameEngine() {
   ui.setInputEnabled(false);
   ui.showSystemMessage("Initializing engine...");
 
-  const saved = storage.loadSession();
   try {
-    targets = await storage.fetchTargetsList();
-  } catch (e) {
-    console.warn("Failed to fetch targets list, falling back to saved session", e);
+    manifest = await storage.fetchManifest();
+  } catch (error) {
+    console.error("Engine Init Failure:", error);
+    ui.showSystemMessage("⚠️ Failed to load game data. Please refresh to try again.", true);
+    return;
   }
 
-  const chosenTarget =
-    saved && (targets.length === 0 || targets.includes(saved.targetWord))
-      ? saved.targetWord
-      : pickRandomTarget();
-
+  const saved = storage.loadSession(manifest.version);
+  const chosenTarget = saved && manifest.targets.includes(saved.targetWord) ? saved.targetWord : pickRandomTarget();
   if (!chosenTarget || !(await loadTarget(chosenTarget))) return;
 
   if (saved && saved.targetWord === chosenTarget) {
@@ -42,16 +41,18 @@ async function initGameEngine() {
 }
 
 function pickRandomTarget(exclude?: string): string | null {
+  const targets = manifest?.targets ?? [];
   const pool = targets.length > 1 ? targets.filter((t) => t !== exclude) : targets;
   return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
 }
 
-/** Loads a target's top-K list into the engine. Returns false (and shows an error) on failure. */
+/** Ranks the vocabulary against a target and loads it into the engine. Returns false (and shows an error) on failure. */
 async function loadTarget(target: string): Promise<boolean> {
+  if (!manifest) return false;
   isLoading = true;
   ui.setInputEnabled(false);
   try {
-    engine.hydrateTopK(target, await storage.loadTopK(target));
+    engine.hydrateRanking(await storage.rankVocabulary(manifest, target));
     ui.showSystemMessage("");
     return true;
   } catch (error) {
@@ -61,6 +62,10 @@ async function loadTarget(target: string): Promise<boolean> {
   } finally {
     isLoading = false;
   }
+}
+
+function saveSession(): void {
+  if (manifest) storage.saveSession({ ...engine.getState(), dataVersion: manifest.version });
 }
 
 function restoreSession(saved: storage.SessionData) {
@@ -108,7 +113,7 @@ function handleGuessSubmit(input: string): void {
   if (result.type === "blocked") return;
 
   if (result.type === "not_found") {
-    ui.showMessage("Error", `"${result.input}" is not in the database.`, true);
+    ui.showMessage("Error", `"${result.input}" is not in the word list.`, true);
     ui.clearInput();
     return;
   }
@@ -120,25 +125,28 @@ function handleGuessSubmit(input: string): void {
   }
 
   ui.clearInput();
-  storage.saveSession(engine.getState());
+  saveSession();
   ui.renderGame(engine.getState());
   checkWinCondition();
 }
 
 function handleGetHint(): void {
   if (!canPlay()) return;
-  const hint = engine.generateHint();
-  if (hint) {
-    storage.saveSession(engine.getState());
+  const result = engine.generateHint();
+  if (result.type === "exhausted") {
+    ui.showMessage("Notice", "No closer hints left: the word is right next to your best guess!", false);
+    return;
+  }
+  if (result.type === "hint") {
+    saveSession();
     ui.renderGame(engine.getState());
-    checkWinCondition();
   }
 }
 
 function handleGiveUp(): void {
   if (!canPlay()) return;
   engine.endGame();
-  storage.saveSession(engine.getState());
+  saveSession();
   ui.showEndGameOverlay(engine.getState(), false);
 }
 
@@ -146,7 +154,7 @@ function checkWinCondition(): void {
   if (engine.getState().isGameOver || !engine.isWin()) return;
   engine.endGame();
   // Persist before the celebratory delay so a quick reload still sees the finished game.
-  storage.saveSession(engine.getState());
+  saveSession();
   ui.setInputEnabled(false);
   setTimeout(() => ui.showEndGameOverlay(engine.getState(), true), 250);
 }

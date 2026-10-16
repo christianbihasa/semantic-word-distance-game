@@ -1,22 +1,25 @@
-import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as engine from "../src/engine";
-import { parseTopKPayload } from "../src/topk-format";
+import { loadGameData } from "./load-data";
 
-const dir = new URL("../public/topk/", import.meta.url);
-const readJson = (name: string): unknown => JSON.parse(readFileSync(new URL(name, dir), "utf8"));
-const targets = readJson("targets.json") as string[];
+const { manifest, vocab } = loadGameData();
+const vocabSet = new Set(vocab);
 
-describe("topk data", () => {
-  it("has a non-empty, duplicate-free target list", () => {
-    expect(targets.length).toBeGreaterThan(0);
-    expect(new Set(targets).size).toBe(targets.length);
+describe("game data", () => {
+  it("manifest matches the vocabulary", () => {
+    expect(vocab.length).toBe(manifest.count);
+    expect(vocabSet.size).toBe(vocab.length);
+    expect(vocab.every((w) => /^[a-z]+$/.test(w))).toBe(true);
   });
 
-  it.each(targets)("%s parses and is winnable by typing it", (target) => {
-    const entries = parseTopKPayload(readJson(`${target}.json`));
-    expect(entries.length).toBeGreaterThan(0);
-    engine.hydrateTopK(target, entries);
-    expect(engine.stemWord(target)).toBe(target);
+  it("has a large, duplicate-free target list drawn from the vocabulary", () => {
+    expect(manifest.targets.length).toBeGreaterThan(1000);
+    expect(new Set(manifest.targets).size).toBe(manifest.targets.length);
+    expect(manifest.targets.filter((t) => !vocabSet.has(t))).toEqual([]);
+  });
+
+  it("every target is winnable by typing it", () => {
+    const unwinnable = manifest.targets.filter((t) => engine.stemWord(t, (w) => vocabSet.has(w)) !== t);
+    expect(unwinnable).toEqual([]);
   });
 });

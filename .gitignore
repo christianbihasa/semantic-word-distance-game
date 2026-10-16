@@ -21,3 +21,5 @@ frontend/.env*
 # IDE/Editor local settings
 .vscode/
 .idea/
+# Tool caches
+.ruff_cache/

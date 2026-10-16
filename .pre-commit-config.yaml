@@ -1,0 +1,28 @@
+# Install once: pip install pre-commit && pre-commit install
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (data-pipeline)
+        language: python
+        additional_dependencies: ["ruff==0.17.1"]
+        entry: ruff check --config data-pipeline/pyproject.toml
+        files: ^data-pipeline/.*\.py$
+      - id: ruff-format
+        name: ruff format (data-pipeline)
+        language: python
+        additional_dependencies: ["ruff==0.17.1"]
+        entry: ruff format --check --config data-pipeline/pyproject.toml
+        files: ^data-pipeline/.*\.py$
+      - id: frontend-lint
+        name: eslint + prettier (frontend)
+        language: system
+        entry: npm --prefix frontend run lint
+        files: ^frontend/
+        pass_filenames: false
+      - id: frontend-typecheck
+        name: tsc (frontend)
+        language: system
+        entry: npm --prefix frontend run typecheck
+        files: ^frontend/.*\.ts$
+        pass_filenames: false

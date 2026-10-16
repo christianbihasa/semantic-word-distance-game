@@ -1,9 +1,7 @@
 /**
  * engine.ts — Core game state machine.
- * O(1) word lookups via Map, zero sorting, zero array scanning.
+ * Every vocabulary word has a rank (1 = target); lookups are O(1) in both directions.
  */
-
-import type { TopKEntry } from "./topk-format";
 
 export interface Guess {
   word: string;
@@ -19,10 +17,10 @@ export interface GameState {
   isGameOver: boolean;
 }
 
-// O(1) word → rank lookup
+// word → rank (1-based)
 const wordRankMap = new Map<string, number>();
-// O(1) rank → word reverse lookup (for hints)
-const rankWordMap = new Map<number, string>();
+// rank → word: rankedWords[rank - 1]
+let rankedWords: string[] = [];
 
 let totalVocabSize = 0;
 
@@ -39,24 +37,14 @@ const state: GameState = {
 
 // ─── Hydration ────────────────────────────────────────────────
 
-export function hydrateTopK(target: string, entries: TopKEntry[]): void {
+/** Loads a full ranking: `words[0]` is the target, `words[i]` has rank i + 1. */
+export function hydrateRanking(words: string[]): void {
+  if (words.length === 0) throw new Error("Cannot start a game with an empty ranking");
   wordRankMap.clear();
-  rankWordMap.clear();
-
-  const t = target.trim().toLowerCase();
-  wordRankMap.set(t, 1);
-  rankWordMap.set(1, t);
-
-  for (let i = 0; i < entries.length; i++) {
-    const w = (entries[i][0] || "").trim().toLowerCase();
-    if (!w) continue;
-    const rank = i + 2;
-    wordRankMap.set(w, rank);
-    rankWordMap.set(rank, w);
-  }
-
-  totalVocabSize = wordRankMap.size;
-  state.targetWord = t;
+  rankedWords = words;
+  for (let i = 0; i < words.length; i++) wordRankMap.set(words[i], i + 1);
+  totalVocabSize = words.length;
+  state.targetWord = words[0];
 }
 
 export function getVocabSize(): number {
@@ -72,18 +60,35 @@ export function getRank(word: string): number | undefined {
 }
 
 export function getWordAtRank(rank: number): string | undefined {
-  return rankWordMap.get(rank);
+  return rankedWords[rank - 1];
 }
 
 // ─── Suffix stemming ──────────────────────────────────────────
 
 const IRREGULAR_PLURALS: Record<string, string> = {
-  leaves: "leaf", knives: "knife", lives: "life", thieves: "thief",
-  wolves: "wolf", halves: "half", calves: "calf", shelves: "shelf",
-  elves: "elf", loaves: "loaf", children: "child", men: "man",
-  women: "woman", teeth: "tooth", feet: "foot", geese: "goose",
-  mice: "mouse", data: "datum", phenomena: "phenomenon", oxen: "ox",
-  cacti: "cactus", fungi: "fungus", nuclei: "nucleus",
+  leaves: "leaf",
+  knives: "knife",
+  lives: "life",
+  thieves: "thief",
+  wolves: "wolf",
+  halves: "half",
+  calves: "calf",
+  shelves: "shelf",
+  elves: "elf",
+  loaves: "loaf",
+  children: "child",
+  men: "man",
+  women: "woman",
+  teeth: "tooth",
+  feet: "foot",
+  geese: "goose",
+  mice: "mouse",
+  data: "datum",
+  phenomena: "phenomenon",
+  oxen: "ox",
+  cacti: "cactus",
+  fungi: "fungus",
+  nuclei: "nucleus",
 };
 
 /**
@@ -146,7 +151,7 @@ export function submitGuess(input: string): GuessResult {
 }
 
 export function isWin(): boolean {
-  return state.guesses.some((g) => g.rank === 1 || g.word === state.targetWord);
+  return state.guesses.some((g) => g.rank === 1);
 }
 
 export function endGame(): void {
@@ -169,73 +174,56 @@ export function restoreState(target: string, guesses: Guess[], latestGuess: Gues
 
 // ─── Hint generation ──────────────────────────────────────────
 
-export function generateHint(): Guess | null {
-  if (state.isGameOver || totalVocabSize === 0) return null;
+export type HintResult = { type: "hint"; guess: Guess } | { type: "exhausted" } | { type: "blocked" };
 
-  let currentClosestRank = totalVocabSize;
-  if (state.guesses.length > 0) {
-    for (const g of state.guesses) {
-      if (g.rank < currentClosestRank) currentClosestRank = g.rank;
-    }
-  }
-  if (currentClosestRank === 1) return null;
+/** Where to aim the next hint, given the best rank so far. Big jumps far away, small steps up close. */
+function hintAim(closest: number): number {
+  const r = Math.random();
+  if (closest > 1000) return 300 + Math.floor(r * 700); // land somewhere warm
+  if (closest > 300) return Math.floor(closest * (0.4 + r * 0.2));
+  if (closest > 50) return Math.floor(closest * (0.5 + r * 0.2));
+  if (closest > 10) return closest - 3 - Math.floor(r * 6);
+  return closest - 1 - Math.floor(r * Math.min(2, closest - 2));
+}
 
-  let targetRank: number;
-  if (currentClosestRank <= 25) {
-    targetRank = currentClosestRank - (Math.floor(Math.random() * Math.min(4, currentClosestRank - 1)) + 1);
-  } else if (currentClosestRank <= 100) {
-    targetRank = currentClosestRank - (Math.floor(Math.random() * 12) + 4);
-  } else if (currentClosestRank <= 1000) {
-    targetRank = Math.floor(currentClosestRank * 0.75);
-  } else {
-    targetRank = Math.floor(currentClosestRank * 0.5);
-  }
-  if (targetRank < 1) targetRank = 1;
-  if (targetRank >= currentClosestRank) targetRank = currentClosestRank - 1;
+/**
+ * Reveals an unguessed word closer than the best guess so far. Hints never reveal the
+ * target itself: once the best guess is #2, there is nothing left to give ("exhausted").
+ */
+export function generateHint(): HintResult {
+  if (state.isGameOver || totalVocabSize === 0) return { type: "blocked" };
 
-  // O(1) rank→word lookup instead of O(n) iteration
-  let hintWord = rankWordMap.get(targetRank) ?? "";
-  let finalRank = targetRank;
+  const closest = state.guesses.reduce((best, g) => Math.min(best, g.rank), totalVocabSize + 1);
+  if (closest <= 2) return { type: "exhausted" };
 
-  const guessedWords = new Set(state.guesses.map((g) => g.word));
-  let scanOffset = 1;
-  while ((!hintWord || guessedWords.has(hintWord)) && scanOffset < 100) {
-    let check = targetRank + scanOffset;
-    const wUp = rankWordMap.get(check);
-    if (wUp && !guessedWords.has(wUp)) {
-      hintWord = wUp;
-      finalRank = check;
-      break;
-    }
-    check = targetRank - scanOffset;
-    if (check >= 1) {
-      const wDown = rankWordMap.get(check);
-      if (wDown && !guessedWords.has(wDown)) {
-        hintWord = wDown;
-        finalRank = check;
-        break;
+  const aim = Math.min(Math.max(hintAim(closest), 2), closest - 1);
+  const guessed = new Set(state.guesses.map((g) => g.word));
+
+  // Search outward from the aim for an unguessed word in ranks [2, closest - 1].
+  for (let offset = 0; offset < closest; offset++) {
+    for (const rank of offset === 0 ? [aim] : [aim + offset, aim - offset]) {
+      if (rank < 2 || rank >= closest) continue;
+      const word = rankedWords[rank - 1];
+      if (word && !guessed.has(word)) {
+        const hint: Guess = { word, rank, timestamp: Date.now(), isHint: true };
+        state.guesses.push(hint);
+        state.latestGuess = hint;
+        return { type: "hint", guess: hint };
       }
     }
-    scanOffset++;
   }
-
-  if (!hintWord || finalRank === 1) {
-    hintWord = state.targetWord;
-    finalRank = 1;
-  }
-
-  const hint: Guess = { word: hintWord, rank: finalRank, timestamp: Date.now(), isHint: true };
-  state.guesses.push(hint);
-  state.latestGuess = hint;
-  return hint;
+  return { type: "exhausted" };
 }
 
 // ─── Temperature tier ─────────────────────────────────────────
 
 export type Tier = "hot" | "warm" | "cold";
 
+export const HOT_MAX_RANK = 100;
+export const WARM_MAX_RANK = 1000;
+
 export function getTier(rank: number): Tier {
-  if (rank === 1 || (rank >= 2 && rank <= 75)) return "hot";
-  if (rank >= 76 && rank <= 300) return "warm";
+  if (rank <= HOT_MAX_RANK) return "hot";
+  if (rank <= WARM_MAX_RANK) return "warm";
   return "cold";
 }
