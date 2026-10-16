@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import * as engine from "../src/engine";
+import { stemWord } from "../src/engine";
 import { loadGameData } from "./load-data";
 
 const { manifest, vocab } = loadGameData();
@@ -19,7 +19,7 @@ describe("game data", () => {
   });
 
   it("every target is winnable by typing it", () => {
-    const unwinnable = manifest.targets.filter((t) => engine.stemWord(t, (w) => vocabSet.has(w)) !== t);
+    const unwinnable = manifest.targets.filter((t) => stemWord(t, (w) => vocabSet.has(w)) !== t);
     expect(unwinnable).toEqual([]);
   });
 });

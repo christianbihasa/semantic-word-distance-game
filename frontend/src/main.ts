@@ -1,9 +1,10 @@
 import * as storage from "./storage";
-import * as engine from "./engine";
+import { Game } from "./engine";
 import * as ui from "./ui";
 import type { Manifest } from "./ranking";
 
 let manifest: Manifest | null = null;
+let game: Game | null = null;
 let isLoading = false;
 
 function init() {
@@ -31,12 +32,14 @@ async function initGameEngine() {
 
   const saved = storage.loadSession(manifest.version);
   const chosenTarget = saved && manifest.targets.includes(saved.targetWord) ? saved.targetWord : pickRandomTarget();
-  if (!chosenTarget || !(await loadTarget(chosenTarget))) return;
+  if (!chosenTarget) return;
+  const ranking = await loadRanking(chosenTarget);
+  if (!ranking) return;
 
   if (saved && saved.targetWord === chosenTarget) {
-    restoreSession(saved);
+    restoreSession(ranking, saved);
   } else {
-    beginRound();
+    beginRound(ranking);
   }
 }
 
@@ -46,69 +49,67 @@ function pickRandomTarget(exclude?: string): string | null {
   return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
 }
 
-/** Ranks the vocabulary against a target and loads it into the engine. Returns false (and shows an error) on failure. */
-async function loadTarget(target: string): Promise<boolean> {
-  if (!manifest) return false;
+/** The vocabulary ranked against `target` (target first), or null after showing an error. */
+async function loadRanking(target: string): Promise<string[] | null> {
+  if (!manifest) return null;
   isLoading = true;
   ui.setInputEnabled(false);
   try {
-    engine.hydrateRanking(await storage.rankVocabulary(manifest, target));
+    const ranking = await storage.rankVocabulary(manifest, target);
     ui.showSystemMessage("");
-    return true;
+    return ranking;
   } catch (error) {
     console.error("Engine Init Failure:", error);
     ui.showSystemMessage("⚠️ Failed to load the word list. Please refresh to try again.", true);
-    return false;
+    return null;
   } finally {
     isLoading = false;
   }
 }
 
 function saveSession(): void {
-  if (manifest) storage.saveSession({ ...engine.getState(), dataVersion: manifest.version });
+  if (manifest && game) storage.saveSession({ ...game.getState(), dataVersion: manifest.version });
 }
 
-function restoreSession(saved: storage.SessionData) {
-  engine.restoreState(saved.targetWord, saved.guesses, saved.latestGuess, saved.isGameOver);
+function restoreSession(ranking: string[], saved: storage.SessionData) {
+  game = new Game(ranking, saved);
   ui.setInputEnabled(!saved.isGameOver);
   ui.clearInput();
-  ui.renderGame(engine.getState());
+  ui.renderGame(game.getState());
   if (saved.isGameOver) {
-    ui.showEndGameOverlay(engine.getState(), engine.isWin());
+    ui.showEndGameOverlay(game.getState(), game.isWin());
   } else {
     checkWinCondition();
   }
 }
 
-/** Starts a fresh round on the currently loaded target. */
-function beginRound(): void {
+function beginRound(ranking: string[]): void {
   storage.clearSession();
-  engine.resetState(engine.getState().targetWord);
+  game = new Game(ranking);
   ui.setInputEnabled(true);
   ui.clearInput();
-  ui.renderGame(engine.getState());
+  ui.renderGame(game.getState());
 }
 
-/** Picks a different target, loads it, and starts a fresh round. */
+/** Picks a different target, ranks it, and starts a fresh round. */
 async function playAgain(): Promise<void> {
-  if (isLoading) return;
-  const next = pickRandomTarget(engine.getState().targetWord);
-  if (!next) {
-    beginRound();
-    return;
-  }
+  if (isLoading || !game) return;
+  const next = pickRandomTarget(game.getState().targetWord) ?? game.getState().targetWord;
   storage.clearSession();
   ui.showSystemMessage("Loading a new word...");
-  if (await loadTarget(next)) beginRound();
+  const ranking = await loadRanking(next);
+  if (ranking) beginRound(ranking);
 }
 
-function canPlay(): boolean {
-  return !isLoading && engine.getVocabSize() > 0 && !engine.getState().isGameOver;
+/** The active game, if it is accepting moves. */
+function activeGame(): Game | null {
+  return !isLoading && game && !game.getState().isGameOver ? game : null;
 }
 
 function handleGuessSubmit(input: string): void {
-  if (!canPlay()) return;
-  const result = engine.submitGuess(input);
+  const game = activeGame();
+  if (!game) return;
+  const result = game.submitGuess(input);
 
   if (result.type === "blocked") return;
 
@@ -126,37 +127,40 @@ function handleGuessSubmit(input: string): void {
 
   ui.clearInput();
   saveSession();
-  ui.renderGame(engine.getState());
+  ui.renderGame(game.getState());
   checkWinCondition();
 }
 
 function handleGetHint(): void {
-  if (!canPlay()) return;
-  const result = engine.generateHint();
+  const game = activeGame();
+  if (!game) return;
+  const result = game.generateHint();
   if (result.type === "exhausted") {
     ui.showMessage("Notice", "No closer hints left: the word is right next to your best guess!", false);
     return;
   }
   if (result.type === "hint") {
     saveSession();
-    ui.renderGame(engine.getState());
+    ui.renderGame(game.getState());
   }
 }
 
 function handleGiveUp(): void {
-  if (!canPlay()) return;
-  engine.endGame();
+  const game = activeGame();
+  if (!game) return;
+  game.end();
   saveSession();
-  ui.showEndGameOverlay(engine.getState(), false);
+  ui.showEndGameOverlay(game.getState(), false);
 }
 
 function checkWinCondition(): void {
-  if (engine.getState().isGameOver || !engine.isWin()) return;
-  engine.endGame();
+  const game = activeGame();
+  if (!game || !game.isWin()) return;
+  game.end();
   // Persist before the celebratory delay so a quick reload still sees the finished game.
   saveSession();
   ui.setInputEnabled(false);
-  setTimeout(() => ui.showEndGameOverlay(engine.getState(), true), 250);
+  setTimeout(() => ui.showEndGameOverlay(game.getState(), true), 250);
 }
 
 init();

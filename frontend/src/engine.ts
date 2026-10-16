@@ -1,5 +1,6 @@
 /**
  * engine.ts — Core game state machine.
+ * A Game owns one round: the full ranking for its target plus the player's guesses.
  * Every vocabulary word has a rank (1 = target); lookups are O(1) in both directions.
  */
 
@@ -17,51 +18,13 @@ export interface GameState {
   isGameOver: boolean;
 }
 
-// word → rank (1-based)
-const wordRankMap = new Map<string, number>();
-// rank → word: rankedWords[rank - 1]
-let rankedWords: string[] = [];
+export type GuessResult =
+  | { type: "success"; guess: Guess }
+  | { type: "not_found"; input: string }
+  | { type: "duplicate"; word: string }
+  | { type: "blocked" };
 
-let totalVocabSize = 0;
-
-export function getState(): Readonly<GameState> {
-  return state;
-}
-
-const state: GameState = {
-  targetWord: "",
-  guesses: [],
-  latestGuess: null,
-  isGameOver: false,
-};
-
-// ─── Hydration ────────────────────────────────────────────────
-
-/** Loads a full ranking: `words[0]` is the target, `words[i]` has rank i + 1. */
-export function hydrateRanking(words: string[]): void {
-  if (words.length === 0) throw new Error("Cannot start a game with an empty ranking");
-  wordRankMap.clear();
-  rankedWords = words;
-  for (let i = 0; i < words.length; i++) wordRankMap.set(words[i], i + 1);
-  totalVocabSize = words.length;
-  state.targetWord = words[0];
-}
-
-export function getVocabSize(): number {
-  return totalVocabSize;
-}
-
-export function hasWord(word: string): boolean {
-  return wordRankMap.has(word);
-}
-
-export function getRank(word: string): number | undefined {
-  return wordRankMap.get(word);
-}
-
-export function getWordAtRank(rank: number): string | undefined {
-  return rankedWords[rank - 1];
-}
+export type HintResult = { type: "hint"; guess: Guess } | { type: "exhausted" } | { type: "blocked" };
 
 // ─── Suffix stemming ──────────────────────────────────────────
 
@@ -96,7 +59,7 @@ const IRREGULAR_PLURALS: Record<string, string> = {
  * suffix is only stripped when the resulting root is itself a known word, so a
  * target like "lotus" or "celebrated" can always be guessed as spelled.
  */
-export function stemWord(word: string, has: (w: string) => boolean = (w) => wordRankMap.has(w)): string {
+export function stemWord(word: string, has: (w: string) => boolean): string {
   const n = word.trim().toLowerCase();
   if (has(n)) return n;
 
@@ -125,56 +88,7 @@ function inflectionCandidates(n: string): string[] {
   return out;
 }
 
-// ─── Game actions ─────────────────────────────────────────────
-
-export type GuessResult =
-  | { type: "success"; guess: Guess }
-  | { type: "not_found"; input: string }
-  | { type: "duplicate"; word: string }
-  | { type: "blocked" };
-
-export function submitGuess(input: string): GuessResult {
-  if (state.isGameOver || totalVocabSize === 0) return { type: "blocked" };
-
-  const raw = input.trim().toLowerCase();
-  if (!raw) return { type: "blocked" };
-
-  const stemmed = stemWord(raw);
-  const rank = wordRankMap.get(stemmed);
-  if (rank === undefined) return { type: "not_found", input: raw };
-  if (state.guesses.some((g) => g.word === stemmed)) return { type: "duplicate", word: stemmed };
-
-  const guess: Guess = { word: stemmed, rank, timestamp: Date.now(), isHint: false };
-  state.guesses.push(guess);
-  state.latestGuess = guess;
-  return { type: "success", guess };
-}
-
-export function isWin(): boolean {
-  return state.guesses.some((g) => g.rank === 1);
-}
-
-export function endGame(): void {
-  state.isGameOver = true;
-}
-
-export function resetState(target: string): void {
-  state.targetWord = target;
-  state.guesses = [];
-  state.latestGuess = null;
-  state.isGameOver = false;
-}
-
-export function restoreState(target: string, guesses: Guess[], latestGuess: Guess | null, isGameOver: boolean): void {
-  state.targetWord = target;
-  state.guesses = guesses;
-  state.latestGuess = latestGuess;
-  state.isGameOver = isGameOver;
-}
-
-// ─── Hint generation ──────────────────────────────────────────
-
-export type HintResult = { type: "hint"; guess: Guess } | { type: "exhausted" } | { type: "blocked" };
+// ─── Hints ────────────────────────────────────────────────────
 
 /** Where to aim the next hint, given the best rank so far. Big jumps far away, small steps up close. */
 function hintAim(closest: number): number {
@@ -186,33 +100,95 @@ function hintAim(closest: number): number {
   return closest - 1 - Math.floor(r * Math.min(2, closest - 2));
 }
 
-/**
- * Reveals an unguessed word closer than the best guess so far. Hints never reveal the
- * target itself: once the best guess is #2, there is nothing left to give ("exhausted").
- */
-export function generateHint(): HintResult {
-  if (state.isGameOver || totalVocabSize === 0) return { type: "blocked" };
+// ─── Game ─────────────────────────────────────────────────────
 
-  const closest = state.guesses.reduce((best, g) => Math.min(best, g.rank), totalVocabSize + 1);
-  if (closest <= 2) return { type: "exhausted" };
+export class Game {
+  private readonly rankedWords: readonly string[];
+  private readonly rankOf = new Map<string, number>();
+  private state: GameState;
 
-  const aim = Math.min(Math.max(hintAim(closest), 2), closest - 1);
-  const guessed = new Set(state.guesses.map((g) => g.word));
+  /** `rankedWords[0]` is the target; `rankedWords[i]` has rank i + 1. Pass `saved` to resume a round. */
+  constructor(rankedWords: readonly string[], saved?: Omit<GameState, "targetWord">) {
+    if (rankedWords.length === 0) throw new Error("Cannot start a game with an empty ranking");
+    this.rankedWords = rankedWords;
+    for (let i = 0; i < rankedWords.length; i++) this.rankOf.set(rankedWords[i], i + 1);
+    this.state = {
+      targetWord: rankedWords[0],
+      guesses: saved ? [...saved.guesses] : [],
+      latestGuess: saved?.latestGuess ?? null,
+      isGameOver: saved?.isGameOver ?? false,
+    };
+  }
 
-  // Search outward from the aim for an unguessed word in ranks [2, closest - 1].
-  for (let offset = 0; offset < closest; offset++) {
-    for (const rank of offset === 0 ? [aim] : [aim + offset, aim - offset]) {
-      if (rank < 2 || rank >= closest) continue;
-      const word = rankedWords[rank - 1];
-      if (word && !guessed.has(word)) {
-        const hint: Guess = { word, rank, timestamp: Date.now(), isHint: true };
-        state.guesses.push(hint);
-        state.latestGuess = hint;
-        return { type: "hint", guess: hint };
+  getState(): Readonly<GameState> {
+    return this.state;
+  }
+
+  get vocabSize(): number {
+    return this.rankedWords.length;
+  }
+
+  getRank(word: string): number | undefined {
+    return this.rankOf.get(word);
+  }
+
+  stem(word: string): string {
+    return stemWord(word, (w) => this.rankOf.has(w));
+  }
+
+  submitGuess(input: string): GuessResult {
+    if (this.state.isGameOver) return { type: "blocked" };
+
+    const raw = input.trim().toLowerCase();
+    if (!raw) return { type: "blocked" };
+
+    const word = this.stem(raw);
+    const rank = this.rankOf.get(word);
+    if (rank === undefined) return { type: "not_found", input: raw };
+    if (this.state.guesses.some((g) => g.word === word)) return { type: "duplicate", word };
+
+    return { type: "success", guess: this.record({ word, rank, timestamp: Date.now(), isHint: false }) };
+  }
+
+  isWin(): boolean {
+    return this.state.guesses.some((g) => g.rank === 1);
+  }
+
+  end(): void {
+    this.state.isGameOver = true;
+  }
+
+  /**
+   * Reveals an unguessed word closer than the best guess so far. Hints never reveal the
+   * target itself: once the best guess is #2, there is nothing left to give ("exhausted").
+   */
+  generateHint(): HintResult {
+    if (this.state.isGameOver) return { type: "blocked" };
+
+    const closest = this.state.guesses.reduce((best, g) => Math.min(best, g.rank), this.vocabSize + 1);
+    if (closest <= 2) return { type: "exhausted" };
+
+    const aim = Math.min(Math.max(hintAim(closest), 2), closest - 1);
+    const guessed = new Set(this.state.guesses.map((g) => g.word));
+
+    // Search outward from the aim for an unguessed word in ranks [2, closest - 1].
+    for (let offset = 0; offset < closest; offset++) {
+      for (const rank of offset === 0 ? [aim] : [aim + offset, aim - offset]) {
+        if (rank < 2 || rank >= closest) continue;
+        const word = this.rankedWords[rank - 1];
+        if (word && !guessed.has(word)) {
+          return { type: "hint", guess: this.record({ word, rank, timestamp: Date.now(), isHint: true }) };
+        }
       }
     }
+    return { type: "exhausted" };
   }
-  return { type: "exhausted" };
+
+  private record(guess: Guess): Guess {
+    this.state.guesses.push(guess);
+    this.state.latestGuess = guess;
+    return guess;
+  }
 }
 
 // ─── Temperature tier ─────────────────────────────────────────
