@@ -14,7 +14,10 @@ export interface SessionData {
   isGameOver: boolean;
 }
 
-const STORAGE_KEY = "heat_seek_session_state";
+export type Mode = "daily" | "random";
+
+const sessionKey = (mode: Mode) => `heat_seek_session_${mode}`;
+const MODE_KEY = "heat_seek_mode";
 
 // BASE_URL keeps asset paths working when the app is deployed under a sub-path.
 const DATA_BASE_URL = `${import.meta.env.BASE_URL}data/`;
@@ -85,18 +88,18 @@ function isSessionData(value: unknown): value is SessionData {
   );
 }
 
-export function saveSession(data: SessionData): void {
+export function saveSession(mode: Mode, data: SessionData): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(sessionKey(mode), JSON.stringify(data));
   } catch {
     /* quota exceeded or private mode — ignore */
   }
 }
 
 /** Returns the saved session only if it was played on the same data version (ranks would differ otherwise). */
-export function loadSession(dataVersion: string): SessionData | null {
+export function loadSession(mode: Mode, dataVersion: string): SessionData | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(sessionKey(mode));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     return isSessionData(parsed) && parsed.dataVersion === dataVersion ? parsed : null;
@@ -105,9 +108,27 @@ export function loadSession(dataVersion: string): SessionData | null {
   }
 }
 
-export function clearSession(): void {
+export function clearSession(mode: Mode): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(sessionKey(mode));
+  } catch {
+    /* ignore */
+  }
+}
+
+// ─── Preferences ──────────────────────────────────────────────
+
+export function loadMode(): Mode {
+  try {
+    return localStorage.getItem(MODE_KEY) === "random" ? "random" : "daily";
+  } catch {
+    return "daily";
+  }
+}
+
+export function saveMode(mode: Mode): void {
+  try {
+    localStorage.setItem(MODE_KEY, mode);
   } catch {
     /* ignore */
   }

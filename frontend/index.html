@@ -22,6 +22,11 @@
           <span class="text-hot">hot</span>, <span class="text-warm">warm</span>, or
           <span class="text-cold">ice cold</span>.
         </p>
+        <div class="mode-toggle" role="group" aria-label="Game mode">
+          <button type="button" id="mode-daily-btn" aria-pressed="true">📅 Daily</button>
+          <button type="button" id="mode-random-btn" aria-pressed="false">🎲 Random</button>
+        </div>
+        <p id="mode-label" class="mode-label"></p>
       </header>
 
       <main class="game-container">
@@ -52,6 +57,7 @@
               <div id="menu-options" class="dropdown-content hidden">
                 <button type="button" id="hint-btn">💡 Get Hint</button>
                 <button type="button" id="giveup-btn" class="danger-btn">🏳️ Give Up</button>
+                <button type="button" id="menu-share-btn" hidden>📋 Share Result</button>
                 <button type="button" id="newword-btn" hidden>🔁 New Word</button>
               </div>
             </div>
@@ -86,6 +92,8 @@
           </div>
         </div>
         <div class="win-modal-footer">
+          <button id="modal-share-btn" class="modal-btn primary-btn" hidden>📋 Share Result</button>
+          <p id="modal-share-feedback" class="share-feedback" aria-live="polite"></p>
           <button id="modal-replay-btn" class="modal-btn primary-btn">Play Again</button>
           <button id="modal-close-btn" class="modal-btn secondary-btn">Close</button>
         </div>

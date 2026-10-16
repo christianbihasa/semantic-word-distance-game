@@ -4,6 +4,7 @@
 
 import type { GameState } from "./engine";
 import { getTier } from "./engine";
+import type { Mode } from "./storage";
 import confetti from "canvas-confetti";
 
 // ─── DOM Element References ─────────────────────────────────────
@@ -22,6 +23,11 @@ const elements = {
   hintBtn: document.getElementById("hint-btn") as HTMLButtonElement,
   giveupBtn: document.getElementById("giveup-btn") as HTMLButtonElement,
   newWordBtn: document.getElementById("newword-btn") as HTMLButtonElement,
+  menuShareBtn: document.getElementById("menu-share-btn") as HTMLButtonElement,
+
+  modeDailyBtn: document.getElementById("mode-daily-btn") as HTMLButtonElement,
+  modeRandomBtn: document.getElementById("mode-random-btn") as HTMLButtonElement,
+  modeLabel: document.getElementById("mode-label") as HTMLParagraphElement,
 
   modalOverlay: document.getElementById("game-modal") as HTMLDivElement,
   modalHeader: document.getElementById("modal-header") as HTMLDivElement,
@@ -29,6 +35,8 @@ const elements = {
   guessesDisplay: document.getElementById("modal-stat-guesses") as HTMLDivElement,
   hintsDisplay: document.getElementById("modal-stat-hints") as HTMLDivElement,
   modalReplayBtn: document.getElementById("modal-replay-btn") as HTMLButtonElement,
+  modalShareBtn: document.getElementById("modal-share-btn") as HTMLButtonElement,
+  shareFeedback: document.getElementById("modal-share-feedback") as HTMLParagraphElement,
   modalCloseBtn: document.getElementById("modal-close-btn") as HTMLButtonElement,
 };
 
@@ -39,7 +47,12 @@ export function bindEvents(handlers: {
   onHint: () => void;
   onGiveUp: () => void;
   onReplay: () => void;
+  onModeChange: (mode: Mode) => void;
+  onShare: () => void;
 }) {
+  elements.modeDailyBtn.addEventListener("click", () => handlers.onModeChange("daily"));
+  elements.modeRandomBtn.addEventListener("click", () => handlers.onModeChange("random"));
+
   elements.guessForm.addEventListener("submit", (e) => {
     e.preventDefault();
     handlers.onSubmitGuess(elements.guessInput.value);
@@ -72,8 +85,16 @@ export function bindEvents(handlers: {
 
   elements.newWordBtn.addEventListener("click", () => {
     setMenuOpen(false);
-    handlers.onReplay();
+    if (currentMode === "daily") handlers.onModeChange("random");
+    else handlers.onReplay();
   });
+
+  elements.menuShareBtn.addEventListener("click", () => {
+    setMenuOpen(false);
+    handlers.onShare();
+  });
+
+  elements.modalShareBtn.addEventListener("click", handlers.onShare);
 
   elements.modalReplayBtn.addEventListener("click", () => {
     closeModal();
@@ -97,11 +118,36 @@ function closeModal(): void {
   elements.menuToggleBtn.focus();
 }
 
-/** In-game actions (hint, give up) vs. the post-game "New Word" action. */
+let currentMode: Mode = "daily";
+
+/** Reflects the active mode in the toggle, subtitle, and post-game actions. */
+export function setMode(mode: Mode, label: string): void {
+  currentMode = mode;
+  elements.modeDailyBtn.setAttribute("aria-pressed", String(mode === "daily"));
+  elements.modeRandomBtn.setAttribute("aria-pressed", String(mode === "random"));
+  elements.modeLabel.textContent = label;
+  elements.newWordBtn.textContent = mode === "daily" ? "🎲 Play a Random Word" : "🔁 New Word";
+  elements.modalReplayBtn.textContent = mode === "daily" ? "Play a Random Word" : "Play Again";
+  elements.modalReplayBtn.classList.toggle("primary-btn", mode !== "daily");
+  elements.modalReplayBtn.classList.toggle("secondary-btn", mode === "daily");
+}
+
+/** In-game actions (hint, give up) vs. post-game actions (share daily result, next word). */
 function syncMenu(isGameOver: boolean): void {
   elements.hintBtn.hidden = isGameOver;
   elements.giveupBtn.hidden = isGameOver;
   elements.newWordBtn.hidden = !isGameOver;
+  elements.menuShareBtn.hidden = !isGameOver || currentMode !== "daily";
+}
+
+/** Feedback under the share button; on clipboard failure, shows the text so it can be copied by hand. */
+export function showShareFeedback(text: string, copied: boolean): void {
+  elements.shareFeedback.textContent = copied ? "Copied to clipboard!" : text;
+  elements.shareFeedback.classList.toggle("share-fallback", !copied);
+}
+
+export function isModalOpen(): boolean {
+  return !elements.modalOverlay.classList.contains("hidden");
 }
 
 const formatRank = (rank: number) => `#${rank.toLocaleString("en-US")}`;
@@ -191,11 +237,12 @@ export function renderGame(state: Readonly<GameState>): void {
   elements.guessListContainer.replaceChildren(frag);
 }
 
-export function showEndGameOverlay(state: Readonly<GameState>, isWin: boolean): void {
+/** `celebrate` fires confetti; pass false when re-showing an already finished game. */
+export function showEndGameOverlay(state: Readonly<GameState>, isWin: boolean, celebrate = isWin): void {
   setInputEnabled(false);
   syncMenu(true);
 
-  if (isWin) {
+  if (isWin && celebrate) {
     confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 }, disableForReducedMotion: true });
   }
 
@@ -214,6 +261,9 @@ export function showEndGameOverlay(state: Readonly<GameState>, isWin: boolean): 
     elements.modalHeader.style.backgroundColor = "var(--heat-cold)";
   }
 
+  const isDaily = currentMode === "daily";
+  elements.modalShareBtn.hidden = !isDaily;
+  elements.shareFeedback.textContent = "";
   elements.modalOverlay.classList.remove("hidden");
-  elements.modalReplayBtn.focus();
+  (isDaily ? elements.modalShareBtn : elements.modalReplayBtn).focus();
 }

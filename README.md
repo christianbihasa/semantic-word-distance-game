@@ -11,6 +11,12 @@ showing how semantically close it is to the target, from **#1** (the word itself
 
 Hints reveal a word closer than your best guess, but never the answer itself.
 
+Two modes:
+
+- **📅 Daily**: everyone gets the same word each local calendar day (puzzle #1 was 2026-10-16), with a
+  spoiler-free **Share** result (one coloured square per guess, no words).
+- **🎲 Random**: a fresh word every round. Each mode keeps its own saved game.
+
 ## Run it locally
 
 Requires Node 24+.
