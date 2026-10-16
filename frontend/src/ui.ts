@@ -1,6 +1,5 @@
 /**
  * ui.ts — Pure DOM manipulation and presentation layer.
- * Includes virtualized list rendering to prevent DOM lag with many guesses.
  */
 
 import type { GameState } from "./engine";
@@ -85,19 +84,31 @@ export function setInputEnabled(enabled: boolean): void {
   if (enabled) elements.guessInput.focus();
 }
 
-export function showSystemMessage(html: string): void {
-  elements.hintDisplayContainer.innerHTML = html;
+// All dynamic text goes through textContent so guesses and data words are never parsed as HTML.
+function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+export function showSystemMessage(text: string, isError = false): void {
+  const container = elements.hintDisplayContainer;
+  if (!text) {
+    container.replaceChildren();
+  } else if (isError) {
+    container.replaceChildren(el("div", "hint-banner reveal-banner", text));
+  } else {
+    container.textContent = text;
+  }
 }
 
 export function showMessage(title: string, message: string, isError = false): void {
-  elements.latestGuessContainer.innerHTML = `
-    <div class="latest-guess-box warning-box animate-shake" style="${isError ? '' : 'background-color: #334155 !important; border-left-color: #f59e0b !important; color: #f8fafc !important;'}">
-      <div>
-        <span class="latest-label">${title}</span>
-        ${message}
-      </div>
-    </div>
-  `;
+  const box = el("div", `latest-guess-box ${isError ? "warning-box" : "notice-box"} animate-shake`);
+  const body = el("div", "");
+  body.append(el("span", "latest-label", title), message);
+  box.append(body);
+  elements.latestGuessContainer.replaceChildren(box);
 }
 
 // ─── Game Rendering ───────────────────────────────────────────
@@ -119,45 +130,33 @@ export function renderGame(state: Readonly<GameState>): void {
   }
 
   if (state.latestGuess) {
-    const tier = getTier(state.latestGuess.rank);
-    elements.latestGuessContainer.innerHTML = `
-      <div class="latest-guess-box ${tier}">
-        <div>
-          <span class="latest-label">Latest Guess</span>
-          <strong>${state.latestGuess.word}</strong>
-        </div>
-        <strong>#${state.latestGuess.rank}</strong>
-      </div>
-    `;
+    const box = el("div", `latest-guess-box ${getTier(state.latestGuess.rank)}`);
+    const label = el("div", "");
+    label.append(el("span", "latest-label", "Latest Guess"), el("strong", "", state.latestGuess.word));
+    box.append(label, el("strong", "", `#${state.latestGuess.rank}`));
+    elements.latestGuessContainer.replaceChildren(box);
   } else {
-    elements.latestGuessContainer.innerHTML = "";
+    elements.latestGuessContainer.replaceChildren();
   }
 
-  // Virtualized/efficient render: re-render whole list but sort is fast.
-  // In a truly massive list, we'd use a virtual scroller, but guesses rarely exceed a few hundred.
-  // We use DocumentFragment to prevent layout thrashing.
-  elements.guessListContainer.innerHTML = "";
+  // Full re-render on each guess: lists stay in the hundreds, so sorting and
+  // rebuilding in a DocumentFragment is cheap and avoids layout thrashing.
   const frag = document.createDocumentFragment();
   const sortedGuesses = [...state.guesses].sort((a, b) => a.rank - b.rank);
 
-  sortedGuesses.forEach((guess) => {
-    const row = document.createElement("div");
-    const tier = getTier(guess.rank);
-    const isTargetLatest = state.latestGuess !== null && guess.word === state.latestGuess.word;
-
-    row.className = `guess-row ${tier}`;
-    row.innerHTML = `
-      <div class="word-wrapper">
-        ${isTargetLatest ? '<span class="arrow-indicator">➔</span>' : ""}
-        ${guess.isHint ? '<span class="hint-bulb-icon">💡</span>' : ""}
-        <span class="word-text">${guess.word}</span>
-      </div>
-      <span class="rank-value">#${guess.rank}</span>
-    `;
+  for (const guess of sortedGuesses) {
+    const row = el("div", `guess-row ${getTier(guess.rank)}`);
+    const wrapper = el("div", "word-wrapper");
+    if (state.latestGuess !== null && guess.word === state.latestGuess.word) {
+      wrapper.append(el("span", "arrow-indicator", "➔"));
+    }
+    if (guess.isHint) wrapper.append(el("span", "hint-bulb-icon", "💡"));
+    wrapper.append(el("span", "word-text", guess.word));
+    row.append(wrapper, el("span", "rank-value", `#${guess.rank}`));
     frag.appendChild(row);
-  });
-  
-  elements.guessListContainer.appendChild(frag);
+  }
+
+  elements.guessListContainer.replaceChildren(frag);
 }
 
 export function showEndGameOverlay(state: Readonly<GameState>, isWin: boolean): void {

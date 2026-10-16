@@ -3,7 +3,7 @@
  * O(1) word lookups via Map, zero sorting, zero array scanning.
  */
 
-import type { TopKEntry } from "./storage";
+import type { TopKEntry } from "./topk-format";
 
 export interface Guess {
   word: string;
@@ -86,31 +86,38 @@ const IRREGULAR_PLURALS: Record<string, string> = {
   cacti: "cactus", fungi: "fungus", nuclei: "nucleus",
 };
 
-export function stemWord(word: string): string {
+/**
+ * Maps an inflected guess to a known word. An exact match always wins, and a
+ * suffix is only stripped when the resulting root is itself a known word, so a
+ * target like "lotus" or "celebrated" can always be guessed as spelled.
+ */
+export function stemWord(word: string, has: (w: string) => boolean = (w) => wordRankMap.has(w)): string {
   const n = word.trim().toLowerCase();
-  if (IRREGULAR_PLURALS[n]) return IRREGULAR_PLURALS[n];
+  if (has(n)) return n;
 
-  if (n.endsWith("ies") && n.length > 3) return n.slice(0, -3) + "y";
-  if (n.endsWith("ves") && n.length > 3) {
-    const fRoot = n.slice(0, -3) + "f";
-    return wordRankMap.has(fRoot) ? fRoot : n.slice(0, -3) + "fe";
-  }
-  if (n.endsWith("es") && n.length > 2) return n.slice(0, -2);
-  if (n.endsWith("s") && !n.endsWith("ss") && n.length > 1) return n.slice(0, -1);
+  const irregular = IRREGULAR_PLURALS[n];
+  if (irregular && has(irregular)) return irregular;
 
-  if (n.endsWith("ed") && n.length > 2) {
-    const rootEd = n.slice(0, -2);
-    if (wordRankMap.has(rootEd)) return rootEd;
-    const rootD = n.slice(0, -1);
-    if (wordRankMap.has(rootD)) return rootD;
-  }
-  if (n.endsWith("ing") && n.length > 3) {
-    const rootIng = n.slice(0, -3);
-    if (wordRankMap.has(rootIng)) return rootIng;
-    const rootE = rootIng + "e";
-    if (wordRankMap.has(rootE)) return rootE;
+  for (const candidate of inflectionCandidates(n)) {
+    if (has(candidate)) return candidate;
   }
   return n;
+}
+
+// "bragg" -> ["bragg", "brag"]: undo consonant doubling before -ed/-ing.
+function withUndoubled(root: string): string[] {
+  return /([^aeiou])\1$/.test(root) ? [root, root.slice(0, -1)] : [root];
+}
+
+function inflectionCandidates(n: string): string[] {
+  const out: string[] = [];
+  if (n.endsWith("ies") && n.length > 4) out.push(n.slice(0, -3) + "y");
+  if (n.endsWith("ves") && n.length > 4) out.push(n.slice(0, -3) + "f", n.slice(0, -3) + "fe");
+  if (n.endsWith("es") && n.length > 3) out.push(n.slice(0, -2));
+  if (n.endsWith("s") && !n.endsWith("ss") && n.length > 2) out.push(n.slice(0, -1));
+  if (n.endsWith("ed") && n.length > 3) out.push(...withUndoubled(n.slice(0, -2)), n.slice(0, -1));
+  if (n.endsWith("ing") && n.length > 4) out.push(...withUndoubled(n.slice(0, -3)), n.slice(0, -3) + "e");
+  return out;
 }
 
 // ─── Game actions ─────────────────────────────────────────────
@@ -142,7 +149,7 @@ export function isWin(): boolean {
   return state.guesses.some((g) => g.rank === 1 || g.word === state.targetWord);
 }
 
-export function endGame(_won: boolean): void {
+export function endGame(): void {
   state.isGameOver = true;
 }
 

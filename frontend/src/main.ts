@@ -2,105 +2,107 @@ import * as storage from "./storage";
 import * as engine from "./engine";
 import * as ui from "./ui";
 
+let targets: string[] = [];
+let isLoading = false;
+
 function init() {
   ui.bindEvents({
     onSubmitGuess: handleGuessSubmit,
     onHint: handleGetHint,
     onGiveUp: handleGiveUp,
-    onReplay: startNewGameRound,
+    onReplay: () => void playAgain(),
   });
 
-  initGameEngine();
+  void initGameEngine();
 }
 
 async function initGameEngine() {
+  ui.setInputEnabled(false);
+  ui.showSystemMessage("Initializing engine...");
+
+  const saved = storage.loadSession();
   try {
-    ui.showSystemMessage("Initializing engine...");
+    targets = await storage.fetchTargetsList();
+  } catch (e) {
+    console.warn("Failed to fetch targets list, falling back to saved session", e);
+  }
 
-    const saved = storage.loadSession();
-    let chosenTarget: string | null = null;
-    try {
-      const targets = await storage.fetchTargetsList();
-      if (saved?.targetWord && targets.includes(saved.targetWord)) {
-        chosenTarget = saved.targetWord;
-      } else {
-        chosenTarget = targets[Math.floor(Math.random() * targets.length)];
-      }
-    } catch (e) {
-      console.warn("Failed to fetch targets list, falling back to saved session", e);
-      if (saved?.targetWord) chosenTarget = saved.targetWord;
-    }
+  const chosenTarget =
+    saved && (targets.length === 0 || targets.includes(saved.targetWord))
+      ? saved.targetWord
+      : pickRandomTarget();
 
-    if (!chosenTarget) throw new Error("No target available");
+  if (!chosenTarget || !(await loadTarget(chosenTarget))) return;
 
-    // Check IDB cache first
-    const cachedTopK = await storage.getTopKFromIDB(chosenTarget);
-    if (cachedTopK && cachedTopK.length > 0) {
-      engine.hydrateTopK(chosenTarget, cachedTopK);
-      ui.showSystemMessage("");
-      restoreOrStart(saved, chosenTarget);
-      return;
-    }
+  if (saved && saved.targetWord === chosenTarget) {
+    restoreSession(saved);
+  } else {
+    beginRound();
+  }
+}
 
-    // Spawn worker to fetch and parse off-thread
-    const worker = new Worker(new URL("./worker-topk.ts", import.meta.url), { type: "module" });
-    worker.postMessage({ target: chosenTarget, url: `/topk/${chosenTarget}.json` });
+function pickRandomTarget(exclude?: string): string | null {
+  const pool = targets.length > 1 ? targets.filter((t) => t !== exclude) : targets;
+  return pool.length > 0 ? pool[Math.floor(Math.random() * pool.length)] : null;
+}
 
-    worker.onmessage = async (e) => {
-      if (e.data.error) {
-        console.error("Top-K worker failed:", e.data.error);
-        ui.showSystemMessage(`<div class="hint-banner reveal-banner">⚠️ Failed to load target payload.</div>`);
-        worker.terminate();
-        return;
-      }
-
-      const entries = e.data.entries;
-      // Persist to IDB asynchronously
-      storage.saveTopKToIDB(chosenTarget!, entries);
-      
-      engine.hydrateTopK(chosenTarget!, entries);
-      ui.showSystemMessage("");
-      restoreOrStart(saved, chosenTarget!);
-      worker.terminate();
-    };
-
-    worker.onerror = (err) => {
-      console.error("Top-K worker error:", err);
-      ui.showSystemMessage(`<div class="hint-banner reveal-banner">⚠️ System initialization failure.</div>`);
-      worker.terminate();
-    };
+/** Loads a target's top-K list into the engine. Returns false (and shows an error) on failure. */
+async function loadTarget(target: string): Promise<boolean> {
+  isLoading = true;
+  ui.setInputEnabled(false);
+  try {
+    engine.hydrateTopK(target, await storage.loadTopK(target));
+    ui.showSystemMessage("");
+    return true;
   } catch (error) {
     console.error("Engine Init Failure:", error);
-    ui.showSystemMessage(`<div class="hint-banner reveal-banner">⚠️ System initialization failure.</div>`);
+    ui.showSystemMessage("⚠️ Failed to load the word list. Please refresh to try again.", true);
+    return false;
+  } finally {
+    isLoading = false;
   }
 }
 
-function restoreOrStart(saved: storage.SessionData | null, target: string) {
-  if (saved && saved.targetWord === target) {
-    engine.restoreState(target, saved.guesses, saved.latestGuess, saved.isGameOver);
-    ui.setInputEnabled(!saved.isGameOver);
-    ui.clearInput();
-    ui.showSystemMessage("");
-    ui.renderGame(engine.getState());
-    if (saved.isGameOver) {
-      ui.showEndGameOverlay(engine.getState(), engine.isWin());
-    }
+function restoreSession(saved: storage.SessionData) {
+  engine.restoreState(saved.targetWord, saved.guesses, saved.latestGuess, saved.isGameOver);
+  ui.setInputEnabled(!saved.isGameOver);
+  ui.clearInput();
+  ui.renderGame(engine.getState());
+  if (saved.isGameOver) {
+    ui.showEndGameOverlay(engine.getState(), engine.isWin());
   } else {
-    startNewGameRound();
+    checkWinCondition();
   }
 }
 
-function startNewGameRound(): void {
+/** Starts a fresh round on the currently loaded target. */
+function beginRound(): void {
   storage.clearSession();
-  const currentTarget = engine.getState().targetWord;
-  engine.resetState(currentTarget);
+  engine.resetState(engine.getState().targetWord);
   ui.setInputEnabled(true);
   ui.clearInput();
-  ui.showSystemMessage("");
   ui.renderGame(engine.getState());
 }
 
+/** Picks a different target, loads it, and starts a fresh round. */
+async function playAgain(): Promise<void> {
+  if (isLoading) return;
+  const next = pickRandomTarget(engine.getState().targetWord);
+  if (!next) {
+    beginRound();
+    return;
+  }
+  storage.clearSession();
+  ui.showSystemMessage("Loading a new word...");
+  if (await loadTarget(next)) beginRound();
+}
+
+function canPlay(): boolean {
+  return !isLoading && engine.getVocabSize() > 0 && !engine.getState().isGameOver;
+}
+
 function handleGuessSubmit(input: string): void {
+  if (!canPlay()) return;
   const result = engine.submitGuess(input);
 
   if (result.type === "blocked") return;
@@ -124,6 +126,7 @@ function handleGuessSubmit(input: string): void {
 }
 
 function handleGetHint(): void {
+  if (!canPlay()) return;
   const hint = engine.generateHint();
   if (hint) {
     storage.saveSession(engine.getState());
@@ -133,21 +136,19 @@ function handleGetHint(): void {
 }
 
 function handleGiveUp(): void {
-  if (engine.getState().isGameOver) return;
-  engine.endGame(false);
-  ui.showEndGameOverlay(engine.getState(), false);
+  if (!canPlay()) return;
+  engine.endGame();
   storage.saveSession(engine.getState());
+  ui.showEndGameOverlay(engine.getState(), false);
 }
 
 function checkWinCondition(): void {
-  if (engine.getState().isGameOver) return;
-  if (engine.isWin()) {
-    engine.endGame(true);
-    setTimeout(() => {
-      ui.showEndGameOverlay(engine.getState(), true);
-      storage.saveSession(engine.getState());
-    }, 250);
-  }
+  if (engine.getState().isGameOver || !engine.isWin()) return;
+  engine.endGame();
+  // Persist before the celebratory delay so a quick reload still sees the finished game.
+  storage.saveSession(engine.getState());
+  ui.setInputEnabled(false);
+  setTimeout(() => ui.showEndGameOverlay(engine.getState(), true), 250);
 }
 
 init();

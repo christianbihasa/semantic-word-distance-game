@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc && tsc -p tests"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
+    "@types/node": "^26.6.5",
     "typescript": "~6.0.2",
-    "vite": "^8.0.12"
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
   },
   "dependencies": {
     "canvas-confetti": "^1.9.4"

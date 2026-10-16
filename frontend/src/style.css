@@ -340,10 +340,16 @@ header p {
   padding-bottom: 0 !important;
 }
 
-.warning-box {
-  background-color: #7f1d1d !important;
-  border-left: 5px solid #ef4444 !important;
-  color: #fca5a5 !important;
+.latest-guess-box.warning-box {
+  background-color: #7f1d1d;
+  border-left: 5px solid #ef4444;
+  color: #fca5a5;
+}
+
+.latest-guess-box.notice-box {
+  background-color: #334155;
+  border-left: 5px solid #f59e0b;
+  color: #f8fafc;
 }
 
 @keyframes shake {
