@@ -265,6 +265,7 @@
   "magnification",
   "fluorescence",
   "ultrasound",
+  "imaging",
   "microscopic",
   "electron",
   "optical",
@@ -308,7 +309,6 @@
   "holographic",
   "stereoscopic",
   "specimen",
-  "organism",
-  "ultrasonic"
+  "organism"
  ]
 }

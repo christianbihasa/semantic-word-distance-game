@@ -95,6 +95,22 @@ rebuilding never reshuffles the daily sequence. `python build_assets.py --resele
 the list from common dictionary headwords (no names, no inflections, minus `blocklist.txt`); that does
 change the daily sequence.
 
+## Evaluating embedding models
+
+`data-pipeline/golden.json` lists, for 20 secret words, the neighbours players expect (one list comes
+from another game's real ranking; the rest are drafts to refine). `evaluate.py` scores any vector file
+against it using the game's own vocabulary and guess rules:
+
+```bash
+cd data-pipeline
+python evaluate.py                                   # the vectors the game ships now
+python evaluate.py glove=current nb=raw_source/numberbatch-en-19.08.txt.gz blend=glove+nb --pca 200 --detail
+```
+
+It reads GloVe, fastText (`.vec`) and ConceptNet Numberbatch files (optionally `.gz`), can blend two
+models (ranking by their average cosine) and score PCA-reduced variants. `eval-baseline.md` holds the
+scores of the current GloVe 300-d vectors for comparison.
+
 ## Development
 
 ```bash

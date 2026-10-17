@@ -75,13 +75,21 @@ class Morphology:
                     out.append((base, pos))
         return out
 
-    def own_count(self, word: str) -> int:
-        """How often `word` itself heads a sense in WordNet's tagged corpus, plus one."""
-        if word not in self._counts:
-            self._counts[word] = 1 + sum(
-                lemma.count() for synset in self._wn.synsets(word) for lemma in synset.lemmas() if lemma.name() == word
+    def own_count(self, word: str, pos: str | None = None) -> int:
+        """How often `word` itself heads a sense in WordNet's tagged corpus, plus one.
+
+        With `pos`, only senses of that part of speech count: "din" is common as a noun (noise) but
+        almost never a verb, so as the base of "dining" it loses to "dine".
+        """
+        key = f"{word}/{pos}"
+        if key not in self._counts:
+            self._counts[key] = 1 + sum(
+                lemma.count()
+                for synset in self._wn.synsets(word, pos)
+                for lemma in synset.lemmas()
+                if lemma.name() == word
             )
-        return self._counts[word]
+        return self._counts[key]
 
     def has_noun_sense(self, word: str) -> bool:
         """True if `word` is itself a noun headword (saw, rose, ground), not just a form of another word."""
@@ -92,10 +100,10 @@ class Morphology:
 OWN_SENSE_RATIO = 0.1
 
 
-def _best_base(known: list[tuple[str, str]], own_count: Callable[[str], int]) -> str:
-    """Prefer a noun base (stripes -> stripe, not strip), then the most common one."""
-    nouns = [b for b, pos in known if pos == "n"]
-    return max(nouns or [b for b, _ in known], key=own_count)
+def _best_base(known: list[tuple[str, str]], own_count: Callable[[str, str | None], int]) -> tuple[str, str]:
+    """Prefer a noun base (stripes -> stripe, not strip), then the one most used in that part of speech."""
+    nouns = [(b, pos) for b, pos in known if pos == "n"]
+    return max(nouns or known, key=lambda bp: own_count(bp[0], bp[1]))
 
 
 def _is_irregular(word: str, base: str) -> bool:
@@ -146,9 +154,11 @@ def build_vocabulary(
     for word in candidates:
         known = [(b, pos) for b, pos in morph.bases(word) if b in candidate_set]
         if word not in required and known:
-            best = _best_base(known, morph.own_count)
+            best, best_pos = _best_base(known, morph.own_count)
             own = morph.own_count(word)  # 1 means no corpus evidence of its own
-            own_sense = own > 1 and own >= OWN_SENSE_RATIO * morph.own_count(best)
+            # Compare against the base's use in the part of speech the form derives from: "landing"
+            # vs. the verb "land", not the very common noun "land".
+            own_sense = own > 1 and own >= OWN_SENSE_RATIO * morph.own_count(best, best_pos)
             homograph = _is_irregular(word, best) and morph.has_noun_sense(word)
             if not (own_sense or homograph):
                 merged[word] = best
@@ -172,7 +182,7 @@ def build_vocabulary(
             target = resolve(word)
         else:
             known = [(b, pos) for b, pos in morph.bases(word) if resolve(b)]
-            target = resolve(_best_base(known, morph.own_count)) if known else None
+            target = resolve(_best_base(known, morph.own_count)[0]) if known else None
         if target:
             aliases[word] = target
     return vocab, aliases

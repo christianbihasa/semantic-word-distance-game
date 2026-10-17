@@ -1,0 +1,86 @@
+{
+  "_about": "Words players expect to rank close to each target (roughly their top 100), used by evaluate.py to compare embedding models. 'source' says where a list came from; edit the drafts freely. Optional 'reference' holds a full ranked list from another game: {word: rank}.",
+  "targets": {
+    "microscope": {
+      "source": "reference list from another semantic word game (top 71)",
+      "near": ["microscopy", "microscopic", "telescope", "magnification", "micrometer", "fluorescence", "lens", "laboratory", "optical", "electron", "spectroscopy", "organism", "microbiology", "histology", "camera", "biology", "specimen", "wavelength", "metrology", "molecular", "pathology", "bacteria", "endoscopy", "diffraction", "measurement", "vacuum", "molecule", "eyepiece", "thermometer", "micro", "tissue", "eye", "eyeglass", "morphology", "experiment", "cell", "sensor", "particle", "bacterium", "prism", "science", "anatomy", "biopsy", "diagnostic", "laser", "spectrometry", "eyesight", "medicine", "ultrasound", "observation", "membrane", "oscilloscope", "tumor", "aperture", "tool", "scientific", "lab", "flashlight", "instrument", "embryo", "probe", "radiation", "infection", "astronomy", "examination", "lithography", "fluorescent", "scalpel", "nanometer", "ophthalmology", "zoom"],
+      "reference": {"microscope": 1, "microscopy": 2, "microscopic": 3, "telescope": 4, "magnification": 5, "micrometer": 6, "fluorescence": 7, "lens": 8, "laboratory": 9, "optical": 10, "electron": 11, "spectroscopy": 12, "organism": 13, "microbiology": 14, "histology": 15, "camera": 16, "biology": 17, "specimen": 18, "wavelength": 19, "metrology": 20, "molecular": 21, "pathology": 22, "bacteria": 23, "endoscopy": 24, "diffraction": 25, "measurement": 26, "vacuum": 27, "molecule": 28, "eyepiece": 29, "thermometer": 30, "micro": 31, "tissue": 32, "eye": 33, "eyeglass": 34, "morphology": 35, "experiment": 36, "cell": 37, "sensor": 38, "particle": 39, "bacterium": 40, "prism": 41, "science": 42, "anatomy": 43, "biopsy": 44, "diagnostic": 45, "laser": 46, "spectrometry": 47, "eyesight": 48, "medicine": 49, "ultrasound": 50, "observation": 51, "membrane": 52, "oscilloscope": 53, "tumor": 54, "aperture": 55, "tool": 56, "scientific": 57, "lab": 58, "flashlight": 59, "instrument": 60, "embryo": 61, "probe": 62, "radiation": 63, "infection": 64, "astronomy": 65, "examination": 66, "lithography": 67, "fluorescent": 68, "scalpel": 69, "nanometer": 70, "ophthalmology": 71, "zoom": 88, "chromatography": 109, "optic": 136, "morphological": 169, "image": 211, "virus": 263, "topology": 328, "human": 409, "oxygen": 414, "atom": 503, "animal": 536, "nose": 565, "water": 625, "hydrogen": 787, "body": 828, "carbon": 889, "blue": 1039, "face": 1050, "tree": 1053, "person": 1092, "mountain": 1147, "ocean": 1474, "man": 2086, "dioxide": 2342, "sand": 3208, "place": 3427, "sea": 4475, "deep": 4675, "guy": 5018, "part": 5157, "beach": 7041, "city": 7041}
+    },
+    "cheese": {
+      "source": "draft",
+      "near": ["cheddar", "mozzarella", "parmesan", "brie", "feta", "gouda", "butter", "milk", "cream", "yogurt", "dairy", "bread", "cracker", "wine", "pizza", "sandwich", "pasta", "macaroni", "burger", "slice", "grate", "melt", "cow", "goat", "mouse", "fondue", "ham", "bacon", "tomato", "sauce", "omelet", "cheesecake"]
+    },
+    "ocean": {
+      "source": "draft",
+      "near": ["sea", "atlantic", "pacific", "water", "wave", "tide", "beach", "coast", "shore", "island", "marine", "underwater", "deep", "current", "whale", "shark", "dolphin", "fish", "coral", "reef", "salt", "sailor", "ship", "boat", "voyage", "harbor", "lake", "river", "seabed", "horizon", "storm", "surf"]
+    },
+    "doctor": {
+      "source": "draft",
+      "near": ["physician", "nurse", "surgeon", "hospital", "patient", "medicine", "medical", "clinic", "dentist", "pharmacist", "diagnosis", "treatment", "prescription", "illness", "disease", "health", "surgery", "therapist", "psychiatrist", "pediatrician", "stethoscope", "appointment", "symptom", "cure", "drug", "vaccine", "ambulance", "emergency", "healer", "practitioner", "checkup", "specialist"]
+    },
+    "guitar": {
+      "source": "draft",
+      "near": ["bass", "guitarist", "piano", "drum", "violin", "banjo", "ukulele", "instrument", "string", "chord", "acoustic", "electric", "amplifier", "band", "rock", "song", "music", "melody", "solo", "riff", "strum", "pick", "fret", "keyboard", "cello", "harp", "mandolin", "concert", "musician", "singer", "jazz", "blues"]
+    },
+    "winter": {
+      "source": "draft",
+      "near": ["summer", "autumn", "spring", "season", "snow", "cold", "ice", "frost", "december", "january", "february", "christmas", "freezing", "blizzard", "chill", "sled", "ski", "skate", "coat", "scarf", "glove", "fireplace", "holiday", "snowman", "icy", "weather", "storm", "wintry", "solstice", "hibernation", "frozen", "chilly"]
+    },
+    "kitchen": {
+      "source": "draft",
+      "near": ["cook", "cooking", "chef", "stove", "oven", "refrigerator", "sink", "cabinet", "counter", "dining", "bathroom", "bedroom", "pantry", "pot", "pan", "knife", "spoon", "plate", "dish", "microwave", "table", "food", "recipe", "bake", "restaurant", "apron", "cupboard", "dishwasher", "fridge", "toaster", "kettle", "breakfast"]
+    },
+    "airport": {
+      "source": "draft",
+      "near": ["airline", "flight", "plane", "aircraft", "terminal", "runway", "airfield", "airplane", "jet", "passenger", "luggage", "baggage", "gate", "departure", "arrival", "pilot", "landing", "takeoff", "hangar", "aviation", "boarding", "ticket", "travel", "customs", "security", "station", "port", "harbor", "taxi", "tourist", "helicopter", "airspace"]
+    },
+    "coffee": {
+      "source": "draft",
+      "near": ["tea", "espresso", "cappuccino", "latte", "caffeine", "cafe", "mug", "cup", "bean", "brew", "milk", "sugar", "cream", "breakfast", "chocolate", "cocoa", "drink", "beverage", "juice", "starbucks", "barista", "roast", "kettle", "morning", "donut", "pastry", "soda", "wine", "beer", "teapot", "decaf", "grinder"]
+    },
+    "forest": {
+      "source": "draft",
+      "near": ["woods", "woodland", "tree", "jungle", "rainforest", "grove", "timber", "pine", "oak", "leaf", "branch", "wildlife", "deer", "wolf", "bear", "hunting", "logging", "deforestation", "park", "wilderness", "meadow", "swamp", "mountain", "valley", "river", "nature", "moss", "fern", "canopy", "lumber", "hike", "ranger"]
+    },
+    "soldier": {
+      "source": "draft",
+      "near": ["army", "troop", "military", "infantry", "officer", "sergeant", "captain", "general", "marine", "veteran", "warrior", "fighter", "combat", "war", "battle", "rifle", "gun", "weapon", "uniform", "helmet", "battlefield", "regiment", "platoon", "commander", "enemy", "wound", "mercenary", "sniper", "recruit", "patrol", "guard", "militia"]
+    },
+    "computer": {
+      "source": "draft",
+      "near": ["software", "hardware", "laptop", "desktop", "pc", "keyboard", "monitor", "mouse", "screen", "processor", "internet", "program", "programmer", "computing", "digital", "electronic", "machine", "network", "server", "data", "printer", "memory", "chip", "technology", "device", "tablet", "phone", "calculator", "robot", "virus", "code", "algorithm"]
+    },
+    "storm": {
+      "source": "draft",
+      "near": ["hurricane", "thunderstorm", "tornado", "typhoon", "cyclone", "blizzard", "rain", "wind", "thunder", "lightning", "flood", "hail", "gale", "tempest", "weather", "cloud", "snow", "downpour", "squall", "rainfall", "shower", "monsoon", "drizzle", "gust", "torrent", "turbulence", "flooding", "damage", "forecast", "sky", "wave", "calm"]
+    },
+    "horse": {
+      "source": "draft",
+      "near": ["pony", "stallion", "mare", "foal", "colt", "donkey", "mule", "zebra", "cattle", "cow", "sheep", "rider", "riding", "jockey", "saddle", "bridle", "stable", "barn", "ranch", "cowboy", "racing", "racehorse", "gallop", "trot", "hoof", "mane", "carriage", "cart", "farm", "equestrian", "derby", "camel"]
+    },
+    "teacher": {
+      "source": "draft",
+      "near": ["student", "school", "classroom", "pupil", "principal", "educator", "tutor", "professor", "instructor", "lecturer", "teaching", "education", "lesson", "class", "headmaster", "mentor", "coach", "librarian", "nurse", "parent", "homework", "grade", "exam", "curriculum", "kindergarten", "university", "college", "learning", "textbook", "blackboard", "chalk", "graduate"]
+    },
+    "volcano": {
+      "source": "draft",
+      "near": ["eruption", "lava", "magma", "crater", "ash", "volcanic", "erupt", "earthquake", "mountain", "geyser", "tsunami", "seismic", "summit", "smoke", "rock", "basalt", "island", "plume", "tectonic", "cone", "mount", "molten", "pumice", "landslide", "disaster", "glacier", "peak", "hawaii", "fire", "explosion", "dormant", "geology"]
+    },
+    "freedom": {
+      "source": "draft",
+      "near": ["liberty", "independence", "democracy", "right", "justice", "equality", "liberation", "sovereignty", "autonomy", "free", "slavery", "oppression", "tyranny", "revolution", "constitution", "speech", "expression", "religion", "dignity", "peace", "human", "struggle", "rebellion", "patriotism", "nation", "citizen", "law", "privacy", "choice", "liberalism", "emancipation", "censorship"]
+    },
+    "anger": {
+      "source": "draft",
+      "near": ["rage", "fury", "frustration", "resentment", "outrage", "hatred", "hostility", "indignation", "wrath", "annoyance", "irritation", "bitterness", "emotion", "fear", "sadness", "grief", "jealousy", "disgust", "anxiety", "despair", "angry", "furious", "temper", "tantrum", "violence", "revenge", "contempt", "shame", "disappointment", "aggression", "hate", "upset"]
+    },
+    "happy": {
+      "source": "draft",
+      "near": ["glad", "joyful", "cheerful", "content", "delighted", "pleased", "thrilled", "excited", "happiness", "joy", "smile", "laugh", "fun", "lucky", "proud", "grateful", "satisfied", "sad", "unhappy", "lonely", "love", "friendly", "wonderful", "good", "nice", "merry", "jolly", "blissful", "ecstatic", "optimistic", "relieved", "comfortable"]
+    },
+    "cook": {
+      "source": "draft",
+      "near": ["chef", "cooking", "bake", "boil", "fry", "grill", "roast", "stew", "simmer", "saute", "kitchen", "recipe", "meal", "dinner", "food", "dish", "oven", "stove", "pan", "pot", "baker", "eat", "prepare", "serve", "heat", "steam", "barbecue", "cuisine", "restaurant", "lunch", "breakfast", "ingredient"]
+    }
+  }
+}

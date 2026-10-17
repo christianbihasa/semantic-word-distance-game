@@ -74,6 +74,7 @@ class FakeMorphology:
         "physics": [("physic", "n")],
         "rioters": [("rioter", "n")],
         "went": [("go", "v")],
+        "dining": [("din", "v"), ("dine", "v")],
     }
     COUNTS = {
         "year": 451,
@@ -94,13 +95,20 @@ class FakeMorphology:
         "physic": 1,
         "physics": 11,
         "go": 400,
+        "din": 30,
+        "dine": 6,
+        "dining": 2,  # under 10% of "din" overall, but over 10% of the verb "dine"
     }
+    # Counts for one part of speech only: "din" is a common noun but a rare verb.
+    POS_COUNTS = {("din", "v"): 1, ("dine", "v"): 6}
     NOUNS = {"year", "scan", "building", "saw", "stripe", "child", "physic", "physics"}
 
     def bases(self, word):
         return self.BASES.get(word, [])
 
-    def own_count(self, word):
+    def own_count(self, word, pos=None):
+        if pos is not None and (word, pos) in self.POS_COUNTS:
+            return self.POS_COUNTS[(word, pos)]
         return self.COUNTS.get(word, 1)
 
     def has_noun_sense(self, word):
@@ -158,6 +166,13 @@ def test_build_vocabulary_pulls_in_rarer_bases_and_two_letter_words():
     )
     assert aliases == {"rioters": "rioter", "went": "go"}
     assert vocab == ["rioter", "go"]  # "do" has no vector in this source, so it is skipped
+
+
+def test_build_vocabulary_compares_bases_within_their_part_of_speech():
+    surface = ["din", "dine", "dining", "dines"]
+    vocab, aliases = common.build_vocabulary(surface, {"din", "dine", "dining"}, FakeMorphology(), required=set())
+    # "dining" derives from the verb "dine" (not the noun "din") and is common enough to stay itself.
+    assert "dining" in vocab and "dining" not in aliases
 
 
 def test_build_vocabulary_always_keeps_required_words():
