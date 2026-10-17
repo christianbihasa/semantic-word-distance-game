@@ -1,5 +1,5 @@
 {
-  "source": "glove.6B.50d.txt via legacy Annoy index",
-  "sha256": "a35fe2cf778292726c8e6a9fc2a157f127d72a6b8b3453e12b6f5c6455c4281c",
-  "imported": "2026-10-16"
+  "source": "glove.6B.300d.txt",
+  "sha256": "91125602f730fea7ca768736c6f442e668b49db095682bf2aad375db061c21ed",
+  "imported": "2026-10-17"
 }

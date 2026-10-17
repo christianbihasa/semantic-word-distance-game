@@ -5,10 +5,12 @@ Outputs (frontend/public/data/):
   embeddings.bin   int8 vectors (count x dim) followed by float32 inverse norms (count)
   manifest.json    content-hash version, layout, provenance and the secret-word list
 
-Vector source, in priority order:
-  --import-glove PATH   a local GloVe .txt you downloaded yourself (sha256 is recorded)
-  --import-annoy PATH   a legacy Annoy index plus its _words.json (one-time migration)
-  (default)             artifacts/vectors.f16.npy + artifacts/words.json from a previous import
+Vector source:
+  --import-glove PATH   a local GloVe .txt you downloaded yourself (put it in raw_source/; its sha256
+                        is recorded). Keeps the current artifacts/words.json vocabulary and order, so
+                        secret words and the daily sequence do not change; add --rebuild-vocab to
+                        re-select the vocabulary from the file instead.
+  (default)             artifacts/vectors.f16.npy + artifacts/words.json from the last import
 """
 
 from __future__ import annotations
@@ -25,24 +27,18 @@ import common
 
 
 def import_source(args: argparse.Namespace) -> None:
-    if args.import_glove:
+    path: Path = args.import_glove
+    if args.rebuild_vocab or not common.WORDS_PATH.exists():
         dictionary, _ = common.english_words()
-        words, vectors = common.read_glove_text(args.import_glove, dictionary, args.max_words)
-        provenance = {
-            "source": args.import_glove.name,
-            "sha256": common.sha256_file(args.import_glove),
-            "imported": date.today().isoformat(),
-        }
+        words, vectors = common.read_glove_text(path, dictionary, args.max_words)
     else:
-        ann = args.import_annoy
-        words = json.loads(ann.with_name(ann.stem + "_words.json").read_text(encoding="utf-8"))
-        meta = json.loads(ann.with_name(ann.stem + "_meta.json").read_text(encoding="utf-8"))
-        vectors = common.read_annoy_vectors(ann, len(words), meta["dim"])
-        provenance = {
-            "source": "glove.6B.50d.txt via legacy Annoy index",
-            "sha256": common.sha256_file(ann),
-            "imported": date.today().isoformat(),
-        }
+        words = json.loads(common.WORDS_PATH.read_text(encoding="utf-8"))
+        vectors = common.read_glove_for_words(path, words)
+    provenance = {
+        "source": path.name,
+        "sha256": common.sha256_file(path),
+        "imported": date.today().isoformat(),
+    }
     common.save_source(words, vectors, provenance)
     print(f"Imported {len(words)} words x {vectors.shape[1]} dims into {common.ARTIFACTS_DIR}")
 
@@ -98,15 +94,14 @@ def build(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    source = parser.add_mutually_exclusive_group()
-    source.add_argument("--import-glove", type=Path, help="Local GloVe .txt file to import")
-    source.add_argument("--import-annoy", type=Path, help="Legacy Annoy .ann file (with _words/_meta json)")
-    parser.add_argument("--max-words", type=int, default=50000, help="Vocabulary size for --import-glove")
+    parser.add_argument("--import-glove", type=Path, help="Local GloVe .txt file to import")
+    parser.add_argument("--rebuild-vocab", action="store_true", help="Re-select the vocabulary from the GloVe file")
+    parser.add_argument("--max-words", type=int, default=50000, help="Vocabulary size for --rebuild-vocab")
     parser.add_argument("--min-rank", type=int, default=400, help="Skip the N most frequent words as targets")
     parser.add_argument("--max-rank", type=int, default=12000, help="Only words this common can be targets")
     args = parser.parse_args()
 
-    if args.import_glove or args.import_annoy:
+    if args.import_glove:
         import_source(args)
     build(args)
 

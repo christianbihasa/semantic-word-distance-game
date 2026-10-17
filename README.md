@@ -35,7 +35,7 @@ Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run lint`, `npm ru
 data-pipeline/build_assets.py ──► frontend/public/data/
                                    manifest.json   version, layout, secret-word list
                                    vocab.json      50,000 words, frequency order
-                                   embeddings.bin  int8 GloVe-50d vectors + inverse norms (≈2.7 MB)
+                                   embeddings.bin  int8 GloVe-300d vectors + inverse norms (≈15 MB)
 
 browser:  main.ts ── storage.ts ── worker-rank.ts (ranks all 50k words vs. the target, ~ms)
              │                         └─ asset-cache.ts (IndexedDB, keyed by data version)
@@ -52,25 +52,30 @@ browser:  main.ts ── storage.ts ── worker-rank.ts (ranks all 50k words v
 
 Requires Python 3.11+.
 
+The built files in `frontend/public/data/` are committed, so you only need this to change the data.
+
+1. Download `glove.6B.zip` from the official Stanford GloVe page (https://nlp.stanford.edu/projects/glove/),
+   unzip it, and put `glove.6B.300d.txt` in `data-pipeline/raw_source/` (git-ignored). The other
+   dimensions in the zip are not needed. Expected SHA-256:
+   `91125602f730fea7ca768736c6f442e668b49db095682bf2aad375db061c21ed`.
+2. Build:
+
 ```bash
 cd data-pipeline
 python -m venv .venv
 .venv/Scripts/activate        # Windows; use `source .venv/bin/activate` elsewhere
 pip install -r requirements-dev.txt
-python build_assets.py        # rebuilds frontend/public/data from artifacts/
+python build_assets.py --import-glove raw_source/glove.6B.300d.txt
 pytest
 ```
 
-`artifacts/vectors.f16.npy` and `artifacts/words.json` are the canonical vector source. To import
-fresh vectors, download `glove.6B.zip` from the official Stanford GloVe page yourself and run:
+The import keeps the vocabulary in `artifacts/words.json` (same words and order, so secret words and the
+daily sequence stay stable) and writes `artifacts/vectors.f16.npy` (git-ignored, ~30 MB). Later rebuilds,
+e.g. after editing `blocklist.txt`, can skip the import: `python build_assets.py`. The source file's
+SHA-256 is recorded in `artifacts/provenance.json` and the manifest; nothing is downloaded automatically.
 
-```bash
-python build_assets.py --import-glove path/to/glove.6B.50d.txt
-```
-
-The file's SHA-256 is recorded in `artifacts/provenance.json` and the manifest. Nothing is downloaded
-automatically. Secret words are common dictionary headwords (no names, no inflections); edit
-`blocklist.txt` to exclude more.
+Secret words are common dictionary headwords (no names, no inflections); edit `blocklist.txt` to exclude
+more.
 
 ## Development
 

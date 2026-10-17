@@ -23,3 +23,6 @@ frontend/.env*
 .idea/
 # Tool caches
 .ruff_cache/
+
+# Imported source vectors (~30 MB for 300-d); rebuild with build_assets.py --import-glove
+data-pipeline/artifacts/vectors.f16.npy

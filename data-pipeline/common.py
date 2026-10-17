@@ -138,16 +138,20 @@ def read_glove_text(path: Path, dictionary: set[str], max_words: int) -> tuple[l
     return words, np.vstack(rows)
 
 
-def read_annoy_vectors(ann_path: Path, count: int, dim: int) -> np.ndarray:
-    """Reads item vectors straight from an Annoy 'angular' index file, without the annoy package.
-
-    Items 0..count-1 are stored first as {int32 n_descendants; int32 children[2]; float32 v[dim]}.
-    """
-    node = np.dtype([("n_descendants", "<i4"), ("children", "<i4", 2), ("v", "<f4", dim)])
-    nodes = np.fromfile(ann_path, dtype=node, count=count)
-    if len(nodes) != count or not np.all(nodes["n_descendants"] == 1):
-        raise ValueError(f"{ann_path} does not start with {count} item nodes of dimension {dim}")
-    return nodes["v"].copy()
+def read_glove_for_words(path: Path, words: list[str]) -> np.ndarray:
+    """Reads vectors for exactly `words` (in that order) from a local GloVe .txt file."""
+    wanted = {w: i for i, w in enumerate(words)}
+    rows: list[np.ndarray | None] = [None] * len(words)
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            word, _, rest = line.partition(" ")
+            i = wanted.get(word)
+            if i is not None and rows[i] is None:
+                rows[i] = np.asarray(rest.split(), dtype=np.float32)
+    missing = [words[i] for i, row in enumerate(rows) if row is None]
+    if missing:
+        raise ValueError(f"{len(missing)} vocabulary words are missing from {path.name}, e.g. {missing[:5]}")
+    return np.vstack(rows)  # type: ignore[arg-type]
 
 
 def save_source(words: list[str], vectors: np.ndarray, provenance: dict) -> None:
