@@ -49,6 +49,15 @@ def test_read_text_vectors_handles_headers_numberbatch_and_gzip(tmp_path):
     assert found["cat"].tolist() == [1, 0]
 
 
+def test_read_text_vectors_prefers_lowercase_but_falls_back_to_capitalised(tmp_path):
+    path = tmp_path / "ft.vec"
+    path.write_text("4 2\nApple 9 9\nDecember 1 2\napple 3 4\nThe 5 5\n", encoding="utf-8")
+    found = evaluate.read_text_vectors(path, {"apple", "december", "the"})
+    assert found["apple"].tolist() == [3, 4]  # the lowercase fruit, not the company
+    assert found["december"].tolist() == [1, 2]  # only a capitalised entry exists
+    assert found["the"].tolist() == [5, 5]
+
+
 def test_resolve_follows_the_games_guess_rules():
     assert evaluate.resolve("held", {"hold"}, {"held": "hold"}) == "hold"
     assert evaluate.resolve("hold", {"hold"}, {}) == "hold"

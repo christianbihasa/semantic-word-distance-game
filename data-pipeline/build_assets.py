@@ -34,8 +34,14 @@ def import_source(path: Path, scan_limit: int) -> None:
     surface_words = all_words[:scan_limit]
     morphology = common.Morphology()
     required = set(common.load_word_list(common.TARGETS_PATH)) if common.TARGETS_PATH.exists() else set()
+    proper = common.proper_headwords()
     words, aliases = common.build_vocabulary(
-        surface_words, common.wordnet_lemmas(), morphology, required, in_source=set(all_words)
+        surface_words,
+        common.wordnet_lemmas() | proper,
+        morphology,
+        required,
+        in_source=set(all_words),
+        never_merge=proper,
     )
     vectors = common.read_glove_for_words(path, words)
     provenance = {

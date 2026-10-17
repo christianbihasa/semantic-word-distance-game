@@ -37,8 +37,18 @@ describe("game data", () => {
     ["internet", "internet"],
     ["physics", "physics"],
     ["building", "building"],
+    ["december", "december"],
+    ["christmas", "christmas"],
+    ["atlantic", "atlantic"],
+    ["parmesan", "parmesan"],
+    ["paris", "paris"],
   ])("guessing %s counts as %s", (guess, expected) => {
     expect(stemWord(guess, (w) => vocabSet.has(w), aliases)).toBe(expected);
+  });
+
+  it.each(["einstein", "shakespeare", "mozart", "lincoln"])("people's names stay out: %s", (name) => {
+    expect(vocabSet.has(name)).toBe(false);
+    expect(aliases.has(name)).toBe(false);
   });
 
   it("every target is winnable by typing it", () => {

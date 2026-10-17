@@ -59,6 +59,28 @@ def wordnet_lemmas() -> set[str]:
     }
 
 
+# Capitalised WordNet entries (December, Atlantic, Parmesan, Paris) are allowed when their most common
+# sense falls in one of these categories; people's names (Einstein, Lincoln) stay out.
+PROPER_NOUN_CATEGORIES = frozenset({"noun.time", "noun.location", "noun.object", "noun.food"})
+
+
+def proper_headwords(categories: frozenset[str] = PROPER_NOUN_CATEGORIES) -> set[str]:
+    """Lowercased capitalised headwords whose dominant WordNet sense is a time, place, landmark or food."""
+    wn = _wordnet()
+    names = {
+        lemma.name()
+        for synset in wn.all_synsets("n")
+        for lemma in synset.lemmas()
+        if lemma.name().isalpha() and lemma.name().istitle()
+    }
+    allowed = set()
+    for name in names:
+        senses = [s for s in wn.synsets(name, "n") if any(lemma.name() == name for lemma in s.lemmas())]
+        if senses and senses[0].lexname() in categories:  # synsets come most-common first
+            allowed.add(name.lower())
+    return allowed
+
+
 class Morphology:
     """WordNet-backed answers to "what is this word's base form?" and "how common is this headword?"."""
 
@@ -121,6 +143,7 @@ def build_vocabulary(
     morph: Morphology,
     required: set[str],
     in_source: set[str] | None = None,
+    never_merge: frozenset[str] | set[str] = frozenset(),
 ) -> tuple[list[str], dict[str, str]]:
     """Chooses the guessable, ranked vocabulary and an alias map for other word forms.
 
@@ -133,6 +156,8 @@ def build_vocabulary(
 
     A common form also pulls in its dictionary base even when the base itself is rarer ("footsteps"
     brings in "footstep"), as long as `in_source` (the words that have vectors) contains it.
+    `never_merge` words (proper nouns such as "wales" or "paris") are never folded into a
+    lookalike base.
     """
     candidates: list[str] = []
     candidate_set: set[str] = set()
@@ -153,7 +178,7 @@ def build_vocabulary(
     merged: dict[str, str] = {}
     for word in candidates:
         known = [(b, pos) for b, pos in morph.bases(word) if b in candidate_set]
-        if word not in required and known:
+        if word not in required and word not in never_merge and known:
             best, best_pos = _best_base(known, morph.own_count)
             own = morph.own_count(word)  # 1 means no corpus evidence of its own
             # Compare against the base's use in the part of speech the form derives from: "landing"

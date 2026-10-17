@@ -70,9 +70,14 @@ def _token(raw: str) -> str | None:
 
 
 def read_text_vectors(path: Path, wanted: set[str]) -> dict[str, np.ndarray]:
-    """Vectors for `wanted` words from a GloVe/fastText/Numberbatch text file (first occurrence wins)."""
+    """Vectors for `wanted` words from a GloVe/fastText/Numberbatch text file (first occurrence wins).
+
+    Cased files (fastText) are matched on the exact lowercase entry; a capitalised entry ("December")
+    is used only when the file has no lowercase one, so "apple" never gets "Apple"'s vector.
+    """
     opener = gzip.open if path.suffix == ".gz" else open
     found: dict[str, np.ndarray] = {}
+    capitalised: dict[str, np.ndarray] = {}
     with opener(path, "rt", encoding="utf-8", errors="replace") as f:
         for n, line in enumerate(f):
             word, _, rest = line.rstrip().partition(" ")
@@ -81,7 +86,11 @@ def read_text_vectors(path: Path, wanted: set[str]) -> dict[str, np.ndarray]:
             token = _token(word)
             if token in wanted and token not in found:
                 found[token] = np.asarray(rest.split(), dtype=np.float32)
-    return found
+            elif token is None and word.istitle() and word.isalpha():
+                lower = word.lower()
+                if lower in wanted and lower not in capitalised:
+                    capitalised[lower] = np.asarray(rest.split(), dtype=np.float32)
+    return {**capitalised, **found}
 
 
 def load_model(name: str, source: str, vocab: list[str]) -> Model:

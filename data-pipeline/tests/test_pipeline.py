@@ -175,6 +175,18 @@ def test_build_vocabulary_compares_bases_within_their_part_of_speech():
     assert "dining" in vocab and "dining" not in aliases
 
 
+def test_build_vocabulary_never_merges_proper_nouns():
+    class Wales(FakeMorphology):
+        BASES = {**FakeMorphology.BASES, "wales": [("wale", "n")]}
+        COUNTS = {**FakeMorphology.COUNTS, "wale": 3}
+
+    surface = ["wales", "wale"]
+    merged, _ = common.build_vocabulary(surface, {"wales", "wale"}, Wales(), required=set())
+    kept, aliases = common.build_vocabulary(surface, {"wales", "wale"}, Wales(), required=set(), never_merge={"wales"})
+    assert "wales" not in merged  # without protection it folds into the lookalike "wale"
+    assert "wales" in kept and "wales" not in aliases
+
+
 def test_build_vocabulary_always_keeps_required_words():
     vocab, aliases = common.build_vocabulary(SURFACE, HEADWORDS, FakeMorphology(), required={"years", "zebra"})
     assert "years" in vocab and "years" not in aliases

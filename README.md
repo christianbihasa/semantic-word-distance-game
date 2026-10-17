@@ -57,7 +57,9 @@ browser:  main.ts ── storage.ts ── worker-rank.ts (ranks the whole vocab
 - The vocabulary is every dictionary headword (WordNet) among GloVe's 150,000 most frequent words, in
   base form. A form that is mainly an inflection merges into its base (years -> year, scanning -> scan,
   held -> hold, was -> be); forms that are words in their own right stay (physics, news, building,
-  glasses, saw). Guesses are matched exactly, then via `aliases.json`, then by suffix rules.
+  glasses, saw). Capitalised entries are included when their main sense is a time, place, landmark or
+  food (december, christmas, paris, atlantic, parmesan), but not people's names. Guesses are matched
+  exactly, then via `aliases.json`, then by suffix rules.
 - Rankings are exact cosine similarity over int8-quantised vectors. `frontend/tests/ranking.test.ts`
   checks that the browser reproduces the pipeline's Python ranking exactly.
 - Game data is cached in IndexedDB under its content-hash version; saved games are discarded when
@@ -108,8 +110,8 @@ python evaluate.py glove=current nb=raw_source/numberbatch-en-19.08.txt.gz blend
 ```
 
 It reads GloVe, fastText (`.vec`) and ConceptNet Numberbatch files (optionally `.gz`), can blend two
-models (ranking by their average cosine) and score PCA-reduced variants. `eval-baseline.md` holds the
-scores of the current GloVe 300-d vectors for comparison.
+models (ranking by their average cosine) and score PCA-reduced variants. `eval-bakeoff.md` holds the
+latest comparison of GloVe, fastText and Numberbatch.
 
 ## Development
 
