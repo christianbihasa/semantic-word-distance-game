@@ -44,15 +44,20 @@ is set in `frontend/vite.config.ts` (override with `BASE_PATH=/` for a custom do
 ```
 data-pipeline/build_assets.py ──► frontend/public/data/
                                    manifest.json   version, layout, secret-word list
-                                   vocab.json      50,000 words, frequency order
-                                   embeddings.bin  int8 GloVe-300d vectors + inverse norms (≈15 MB)
+                                   vocab.json      ~31,700 ranked words, frequency order
+                                   aliases.json    other word forms -> ranked word (held -> hold)
+                                   embeddings.bin  int8 GloVe-300d vectors + inverse norms (≈9.6 MB)
 
-browser:  main.ts ── storage.ts ── worker-rank.ts (ranks all 50k words vs. the target, ~ms)
+browser:  main.ts ── storage.ts ── worker-rank.ts (ranks the whole vocabulary vs. the target, ~ms)
              │                         └─ asset-cache.ts (IndexedDB, keyed by data version)
              ├─ engine.ts   game state, stemming, hints, tiers
              └─ ui.ts       DOM rendering (textContent only)
 ```
 
+- The vocabulary is every dictionary headword (WordNet) among GloVe's 150,000 most frequent words, in
+  base form. A form that is mainly an inflection merges into its base (years -> year, scanning -> scan,
+  held -> hold, was -> be); forms that are words in their own right stay (physics, news, building,
+  glasses, saw). Guesses are matched exactly, then via `aliases.json`, then by suffix rules.
 - Rankings are exact cosine similarity over int8-quantised vectors. `frontend/tests/ranking.test.ts`
   checks that the browser reproduces the pipeline's Python ranking exactly.
 - Game data is cached in IndexedDB under its content-hash version; saved games are discarded when
@@ -79,13 +84,16 @@ python build_assets.py --import-glove raw_source/glove.6B.300d.txt
 pytest
 ```
 
-The import keeps the vocabulary in `artifacts/words.json` (same words and order, so secret words and the
-daily sequence stay stable) and writes `artifacts/vectors.f16.npy` (git-ignored, ~30 MB). Later rebuilds,
-e.g. after editing `blocklist.txt`, can skip the import: `python build_assets.py`. The source file's
-SHA-256 is recorded in `artifacts/provenance.json` and the manifest; nothing is downloaded automatically.
+The import selects the vocabulary (rules in `common.py`), writes `artifacts/words.json` and
+`artifacts/aliases.json`, and saves the vectors to `artifacts/vectors.f16.npy` (git-ignored, ~19 MB).
+Later rebuilds that don't change the vocabulary can skip the import: `python build_assets.py`. The source
+file's SHA-256 is recorded in `artifacts/provenance.json` and the manifest; nothing is downloaded
+automatically.
 
-Secret words are common dictionary headwords (no names, no inflections); edit `blocklist.txt` to exclude
-more.
+Secret words live in `targets.txt`, in daily-puzzle order, and are always kept in the vocabulary, so
+rebuilding never reshuffles the daily sequence. `python build_assets.py --reselect-targets` regenerates
+the list from common dictionary headwords (no names, no inflections, minus `blocklist.txt`); that does
+change the daily sequence.
 
 ## Development
 

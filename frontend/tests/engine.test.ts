@@ -139,11 +139,45 @@ describe("Game construction", () => {
 
   it("resumes a saved round without aliasing its guesses", () => {
     const guesses = [{ word: "pie", rank: 2, timestamp: 0 }];
-    const resumed = new Game(RANKED, { guesses, latestGuess: guesses[0], isGameOver: false });
+    const resumed = new Game(RANKED, { saved: { guesses, latestGuess: guesses[0], isGameOver: false } });
     resumed.submitGuess("cake");
     expect(resumed.getState().guesses).toHaveLength(2);
     expect(guesses).toHaveLength(1);
     expect(resumed.submitGuess("pie")).toEqual({ type: "duplicate", word: "pie" });
+  });
+});
+
+describe("aliases", () => {
+  const aliases = new Map([
+    ["held", "hold"],
+    ["children", "child"],
+    ["was", "be"],
+    ["pies", "nonexistent"],
+  ]);
+  const words = ["cheddar", "hold", "child", "be", "pie"];
+
+  it("maps other word forms onto ranked words", () => {
+    const game = new Game(words, { aliases });
+    expect(game.submitGuess("held")).toMatchObject({ type: "success", guess: { word: "hold", rank: 2 } });
+    expect(game.submitGuess("Children")).toMatchObject({ type: "success", guess: { word: "child" } });
+    expect(game.submitGuess("was")).toMatchObject({ type: "success", guess: { word: "be" } });
+  });
+
+  it("treats an alias and its base as the same guess", () => {
+    const game = new Game(words, { aliases });
+    game.submitGuess("hold");
+    expect(game.submitGuess("held")).toEqual({ type: "duplicate", word: "hold" });
+  });
+
+  it("falls back to suffix rules when an alias points nowhere", () => {
+    expect(new Game(words, { aliases }).stem("pies")).toBe("pie");
+  });
+
+  it("accepts aliases that arrive after the round started", () => {
+    const game = new Game(words);
+    expect(game.submitGuess("held")).toEqual({ type: "not_found", input: "held" });
+    game.setAliases(aliases);
+    expect(game.submitGuess("held")).toMatchObject({ type: "success", guess: { word: "hold" } });
   });
 });
 

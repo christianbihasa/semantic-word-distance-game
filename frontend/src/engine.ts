@@ -59,9 +59,13 @@ const IRREGULAR_PLURALS: Record<string, string> = {
  * suffix is only stripped when the resulting root is itself a known word, so a
  * target like "lotus" or "celebrated" can always be guessed as spelled.
  */
-export function stemWord(word: string, has: (w: string) => boolean): string {
+export function stemWord(word: string, has: (w: string) => boolean, aliases?: ReadonlyMap<string, string>): string {
   const n = word.trim().toLowerCase();
   if (has(n)) return n;
+
+  // Dictionary-derived forms from the data pipeline: held -> hold, children -> child, was -> be.
+  const alias = aliases?.get(n);
+  if (alias && has(alias)) return alias;
 
   const irregular = IRREGULAR_PLURALS[n];
   if (irregular && has(irregular)) return irregular;
@@ -105,12 +109,20 @@ function hintAim(closest: number): number {
 export class Game {
   private readonly rankedWords: readonly string[];
   private readonly rankOf = new Map<string, number>();
+  private aliases?: ReadonlyMap<string, string>;
   private state: GameState;
 
-  /** `rankedWords[0]` is the target; `rankedWords[i]` has rank i + 1. Pass `saved` to resume a round. */
-  constructor(rankedWords: readonly string[], saved?: Omit<GameState, "targetWord">) {
+  /**
+   * `rankedWords[0]` is the target; `rankedWords[i]` has rank i + 1. Pass `saved` to resume a round,
+   * and `aliases` to map other word forms (held -> hold) onto ranked words.
+   */
+  constructor(
+    rankedWords: readonly string[],
+    { saved, aliases }: { saved?: Omit<GameState, "targetWord">; aliases?: ReadonlyMap<string, string> } = {},
+  ) {
     if (rankedWords.length === 0) throw new Error("Cannot start a game with an empty ranking");
     this.rankedWords = rankedWords;
+    this.aliases = aliases;
     for (let i = 0; i < rankedWords.length; i++) this.rankOf.set(rankedWords[i], i + 1);
     this.state = {
       targetWord: rankedWords[0],
@@ -132,8 +144,13 @@ export class Game {
     return this.rankOf.get(word);
   }
 
+  /** Supplies word-form aliases that finished loading after this round started. */
+  setAliases(aliases: ReadonlyMap<string, string>): void {
+    this.aliases = aliases;
+  }
+
   stem(word: string): string {
-    return stemWord(word, (w) => this.rankOf.has(w));
+    return stemWord(word, (w) => this.rankOf.has(w), this.aliases);
   }
 
   submitGuess(input: string): GuessResult {

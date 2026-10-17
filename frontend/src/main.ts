@@ -6,6 +6,7 @@ import type { Manifest } from "./ranking";
 
 let manifest: Manifest | null = null;
 let game: Game | null = null;
+let aliases: Map<string, string> = new Map();
 let mode: storage.Mode = storage.loadMode();
 let dailyPuzzle = 0;
 let isLoading = false;
@@ -34,7 +35,13 @@ async function initGameEngine() {
     ui.showSystemMessage("⚠️ Failed to load game data. Please refresh to try again.", true);
     return;
   }
-  await startMode(mode, true);
+  // Aliases improve guess matching but are not essential; load them alongside the first ranking.
+  const aliasesLoaded = storage
+    .fetchAliases(manifest)
+    .then((map) => (aliases = map))
+    .catch((error) => console.warn("Word-form aliases unavailable; using suffix rules only", error));
+  await Promise.all([startMode(mode, true), aliasesLoaded]);
+  game?.setAliases(aliases);
 }
 
 /**
@@ -98,7 +105,7 @@ function saveSession(): void {
 }
 
 function restoreSession(ranking: string[], saved: storage.SessionData) {
-  game = new Game(ranking, saved);
+  game = new Game(ranking, { saved, aliases });
   ui.setInputEnabled(!saved.isGameOver);
   ui.clearInput();
   ui.renderGame(game.getState());
@@ -111,7 +118,7 @@ function restoreSession(ranking: string[], saved: storage.SessionData) {
 
 function beginRound(ranking: string[]): void {
   storage.clearSession(mode);
-  game = new Game(ranking);
+  game = new Game(ranking, { aliases });
   ui.setInputEnabled(true);
   ui.clearInput();
   ui.renderGame(game.getState());

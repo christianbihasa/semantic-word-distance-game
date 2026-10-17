@@ -7,7 +7,7 @@ export interface Manifest {
   version: string;
   count: number;
   dim: number;
-  files: { vocab: string; embeddings: string };
+  files: { vocab: string; embeddings: string; aliases?: string };
   targets: string[];
 }
 

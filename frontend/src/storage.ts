@@ -34,6 +34,16 @@ export async function fetchManifest(): Promise<Manifest> {
   return m;
 }
 
+/** Other word forms -> ranked vocabulary word. Optional: guessing falls back to suffix rules without it. */
+export async function fetchAliases(manifest: Manifest): Promise<Map<string, string>> {
+  if (!manifest.files.aliases) return new Map();
+  const resp = await fetch(DATA_BASE_URL + manifest.files.aliases);
+  if (!resp.ok) throw new Error(`Failed to load ${manifest.files.aliases} (HTTP ${resp.status})`);
+  const raw: unknown = await resp.json();
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("aliases.json is malformed");
+  return new Map(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === "string"));
+}
+
 let worker: Worker | null = null;
 let nextRequestId = 0;
 const pending = new Map<number, { resolve: (words: string[]) => void; reject: (err: Error) => void }>();

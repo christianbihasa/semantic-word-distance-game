@@ -1,5 +1,6 @@
 {
   "source": "glove.6B.300d.txt",
   "sha256": "91125602f730fea7ca768736c6f442e668b49db095682bf2aad375db061c21ed",
-  "imported": "2026-10-17"
+  "imported": "2026-10-17",
+  "scan_limit": 150000
 }
