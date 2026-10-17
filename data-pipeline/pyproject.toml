@@ -11,7 +11,7 @@ extend-exclude = [".venv"]
 select = ["E", "F", "W", "I", "B", "UP"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["common"]
+known-first-party = ["build_assets", "common", "evaluate"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
