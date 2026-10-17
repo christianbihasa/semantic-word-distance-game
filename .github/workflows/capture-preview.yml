@@ -1,0 +1,11 @@
+name: Automated Live Preview Capture
+
+on:
+  deployment_status:
+
+jobs:
+  call-capture:
+    if: github.event.deployment_status.state == 'success'
+    uses: christianbihasa/dev-toolkit/.github/workflows/capture-preview.yml@main
+    permissions:
+      contents: write

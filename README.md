@@ -28,6 +28,16 @@ npm run dev        # http://localhost:5173
 ```
 
 Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run lint`, `npm run format`, `npm run build`.
+`npm run build && npm run preview` serves the production build at the same sub-path as GitHub Pages
+(http://localhost:4173/semantic-word-distance-game/).
+
+## Deployment
+
+Pushes to `main` deploy to GitHub Pages at https://christianbihasa.github.io/semantic-word-distance-game/
+via `.github/workflows/deploy.yml`, which runs CI first and then calls the shared
+`christianbihasa/dev-toolkit` deploy workflow (`working-directory: ./frontend`). After each successful
+deployment, `capture-preview.yml` commits a fresh `preview.png` screenshot. The production base path
+is set in `frontend/vite.config.ts` (override with `BASE_PATH=/` for a custom domain).
 
 ## How it works
 
