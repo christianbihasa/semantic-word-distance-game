@@ -10,6 +10,8 @@ Steps:
   --import-glove PATH   select the vocabulary from a local GloVe .txt (put it in raw_source/; its sha256
                         is recorded) and save its vectors to artifacts/. Needed after changing the
                         vocabulary rules in common.py.
+  --blend PATH          with --import-glove, average in another model's vectors (repeatable); the game
+                        ships GloVe 300-d + fastText crawl-300d-2M, so each ranks by both
   (always)              build frontend/public/data from artifacts/ and targets.txt
 
 Secret words come from targets.txt, in daily-puzzle order, so rebuilding never reshuffles the daily
@@ -29,7 +31,7 @@ import numpy as np
 import common
 
 
-def import_source(path: Path, scan_limit: int) -> None:
+def import_source(path: Path, scan_limit: int, blend_with: list[Path]) -> None:
     all_words = common.read_glove_words(path, limit=None)
     surface_words = all_words[:scan_limit]
     morphology = common.Morphology()
@@ -44,9 +46,27 @@ def import_source(path: Path, scan_limit: int) -> None:
         never_merge=proper,
     )
     vectors = common.read_glove_for_words(path, words)
+    sources = [path]
+    if blend_with:
+        parts = [vectors]
+        for extra in blend_with:
+            found = common.read_text_vectors(extra, set(words))
+            missing = [w for w in words if w not in found]
+            if required & set(missing):
+                raise SystemExit(f"{extra.name} has no vector for secret words {sorted(required & set(missing))[:5]}")
+            if missing:
+                print(f"{extra.name}: dropping {len(missing)} words it has no vector for: {', '.join(missing[:10])}")
+                keep = [i for i, w in enumerate(words) if w in found]
+                words = [words[i] for i in keep]
+                parts = [p[keep] for p in parts]
+                kept = set(words)
+                aliases = {k: v for k, v in aliases.items() if v in kept}
+            parts.append(np.vstack([found[w] for w in words]))
+            sources.append(extra)
+        vectors = common.blend_vectors(parts)
     provenance = {
-        "source": path.name,
-        "sha256": common.sha256_file(path),
+        "sources": [{"file": s.name, "sha256": common.sha256_file(s)} for s in sources],
+        "blend": "average cosine of L2-normalised models" if blend_with else None,
         "imported": date.today().isoformat(),
         "scan_limit": scan_limit,
     }
@@ -120,6 +140,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--import-glove", type=Path, help="Local GloVe .txt file to import")
     parser.add_argument(
+        "--blend",
+        type=Path,
+        action="append",
+        default=[],
+        help="With --import-glove: also average in this vector file (fastText .vec, Numberbatch .txt.gz)",
+    )
+    parser.add_argument(
         "--scan-limit", type=int, default=common.GLOVE_SCAN_LIMIT, help="How many frequent GloVe words to consider"
     )
     parser.add_argument("--reselect-targets", action="store_true", help="Regenerate targets.txt (changes daily order)")
@@ -128,7 +155,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.import_glove:
-        import_source(args.import_glove, args.scan_limit)
+        import_source(args.import_glove, args.scan_limit, args.blend)
     if args.reselect_targets:
         words, *_ = common.load_source()
         reselect_targets(words, args.min_rank, args.max_rank)

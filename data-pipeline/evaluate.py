@@ -24,7 +24,6 @@ accept at all are listed as vocabulary gaps and left out of the scores.
 from __future__ import annotations
 
 import argparse
-import gzip
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +31,7 @@ from pathlib import Path
 import numpy as np
 
 import common
+from common import normalise, read_text_vectors
 
 GOLDEN_PATH = common.PIPELINE_DIR / "golden.json"
 
@@ -52,45 +52,6 @@ class Model:
     @property
     def dim(self) -> int:
         return self.unit.shape[1]
-
-
-def normalise(vectors: np.ndarray) -> np.ndarray:
-    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    norms[norms == 0] = 1.0
-    return (vectors / norms).astype(np.float32)
-
-
-def _token(raw: str) -> str | None:
-    """Plain lowercase word from a vectors-file token; handles Numberbatch's /c/en/ prefix."""
-    if raw.startswith("/c/"):
-        if not raw.startswith("/c/en/"):
-            return None
-        raw = raw[len("/c/en/") :]
-    return raw if common.WORD_RE.match(raw) else None
-
-
-def read_text_vectors(path: Path, wanted: set[str]) -> dict[str, np.ndarray]:
-    """Vectors for `wanted` words from a GloVe/fastText/Numberbatch text file (first occurrence wins).
-
-    Cased files (fastText) are matched on the exact lowercase entry; a capitalised entry ("December")
-    is used only when the file has no lowercase one, so "apple" never gets "Apple"'s vector.
-    """
-    opener = gzip.open if path.suffix == ".gz" else open
-    found: dict[str, np.ndarray] = {}
-    capitalised: dict[str, np.ndarray] = {}
-    with opener(path, "rt", encoding="utf-8", errors="replace") as f:
-        for n, line in enumerate(f):
-            word, _, rest = line.rstrip().partition(" ")
-            if n == 0 and word.isdigit():
-                continue  # "count dim" header in fastText / word2vec / Numberbatch files
-            token = _token(word)
-            if token in wanted and token not in found:
-                found[token] = np.asarray(rest.split(), dtype=np.float32)
-            elif token is None and word.istitle() and word.isalpha():
-                lower = word.lower()
-                if lower in wanted and lower not in capitalised:
-                    capitalised[lower] = np.asarray(rest.split(), dtype=np.float32)
-    return {**capitalised, **found}
 
 
 def load_model(name: str, source: str, vocab: list[str]) -> Model:

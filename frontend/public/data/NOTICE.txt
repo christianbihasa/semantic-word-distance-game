@@ -1,0 +1,19 @@
+Heat Seek game data
+
+embeddings.bin is derived from two sets of pre-trained English word vectors, blended so that each
+word's similarity is the average of the two models:
+
+  fastText crawl-300d-2M
+    Facebook AI Research, https://fasttext.cc/docs/en/english-vectors.html
+    T. Mikolov, E. Grave, P. Bojanowski, C. Puhrsch, A. Joulin,
+    "Advances in Pre-Training Distributed Word Representations" (LREC 2018)
+    Licensed under Creative Commons Attribution-ShareAlike 3.0
+    https://creativecommons.org/licenses/by-sa/3.0/
+
+  GloVe 6B 300d
+    J. Pennington, R. Socher, C. D. Manning, Stanford NLP, https://nlp.stanford.edu/projects/glove/
+    Open Data Commons Public Domain Dedication and License v1.0
+
+Because it is adapted from fastText, embeddings.bin is distributed under CC BY-SA 3.0.
+vocab.json and aliases.json are derived from the GloVe word list and WordNet 3.0
+(Princeton University, WordNet License).

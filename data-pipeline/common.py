@@ -5,6 +5,7 @@ Every path is anchored to this file, so scripts work from any working directory.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import re
@@ -314,6 +315,54 @@ def read_glove_for_words(path: Path, words: list[str]) -> np.ndarray:
     if missing:
         raise ValueError(f"{len(missing)} vocabulary words are missing from {path.name}, e.g. {missing[:5]}")
     return np.vstack(rows)  # type: ignore[arg-type]
+
+
+def normalise(vectors: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return (vectors / norms).astype(np.float32)
+
+
+def _token(raw: str) -> str | None:
+    """Plain lowercase word from a vectors-file token; handles Numberbatch's /c/en/ prefix."""
+    if raw.startswith("/c/"):
+        if not raw.startswith("/c/en/"):
+            return None
+        raw = raw[len("/c/en/") :]
+    return raw if WORD_RE.match(raw) else None
+
+
+def read_text_vectors(path: Path, wanted: set[str]) -> dict[str, np.ndarray]:
+    """Vectors for `wanted` words from a GloVe/fastText/Numberbatch text file (first occurrence wins).
+
+    Cased files (fastText) are matched on the exact lowercase entry; a capitalised entry ("December")
+    is used only when the file has no lowercase one, so "apple" never gets "Apple"'s vector.
+    """
+    opener = gzip.open if path.suffix == ".gz" else open
+    found: dict[str, np.ndarray] = {}
+    capitalised: dict[str, np.ndarray] = {}
+    with opener(path, "rt", encoding="utf-8", errors="replace") as f:
+        for n, line in enumerate(f):
+            word, _, rest = line.rstrip().partition(" ")
+            if n == 0 and word.isdigit():
+                continue  # "count dim" header in fastText / word2vec / Numberbatch files
+            token = _token(word)
+            if token in wanted and token not in found:
+                found[token] = np.asarray(rest.split(), dtype=np.float32)
+            elif token is None and word.istitle() and word.isalpha():
+                lower = word.lower()
+                if lower in wanted and lower not in capitalised:
+                    capitalised[lower] = np.asarray(rest.split(), dtype=np.float32)
+    return {**capitalised, **found}
+
+
+def blend_vectors(parts: list[np.ndarray]) -> np.ndarray:
+    """Concatenates L2-normalised vectors from several models, scaled so the result is unit length.
+
+    The cosine between two blended vectors is the average of the models' cosines, so each model
+    gets an equal say in the ranking regardless of its dimensions or scale.
+    """
+    return np.hstack([normalise(p) for p in parts]) / np.sqrt(len(parts))
 
 
 def save_source(words: list[str], vectors: np.ndarray, aliases: dict[str, str], provenance: dict) -> None:

@@ -1,6 +1,15 @@
 {
-  "source": "glove.6B.300d.txt",
-  "sha256": "91125602f730fea7ca768736c6f442e668b49db095682bf2aad375db061c21ed",
+  "sources": [
+    {
+      "file": "glove.6B.300d.txt",
+      "sha256": "91125602f730fea7ca768736c6f442e668b49db095682bf2aad375db061c21ed"
+    },
+    {
+      "file": "crawl-300d-2M.vec",
+      "sha256": "c85534cb2b7f816cb8d564129add1454a7a789d7b607af7aaa4e0d1c927e62ed"
+    }
+  ],
+  "blend": "average cosine of L2-normalised models",
   "imported": "2026-10-17",
   "scan_limit": 150000
 }

@@ -612,3 +612,15 @@ header p.mode-label {
     transition-duration: 0.01ms !important;
   }
 }
+
+.site-footer {
+  margin-top: 2.5rem;
+  text-align: center;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.site-footer a {
+  color: inherit;
+}

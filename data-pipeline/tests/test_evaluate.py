@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import common  # noqa: E402
 import evaluate  # noqa: E402
 
 
@@ -21,6 +22,15 @@ def test_blend_ranks_by_average_cosine():
     for w in ("y", "z"):
         expected = (a.unit[a.index["x"]] @ a.unit[a.index[w]] + b.unit[b.index["x"]] @ b.unit[b.index[w]]) / 2
         assert blended.unit[blended.index["x"]] @ blended.unit[blended.index[w]] == pytest.approx(expected)
+
+
+def test_blend_vectors_gives_unit_rows_whose_cosine_is_the_average():
+    rng = np.random.default_rng(0)
+    a, b = rng.normal(size=(5, 3)), rng.normal(size=(5, 4)) * 10  # different dims and scales
+    blended = common.blend_vectors([a, b])
+    assert np.allclose(np.linalg.norm(blended, axis=1), 1)
+    ua, ub = common.normalise(a), common.normalise(b)
+    assert blended[0] @ blended[1] == pytest.approx((ua[0] @ ua[1] + ub[0] @ ub[1]) / 2, abs=1e-6)
 
 
 def test_ranks_put_target_first_and_order_by_similarity():
@@ -44,7 +54,7 @@ def test_read_text_vectors_handles_headers_numberbatch_and_gzip(tmp_path):
     path = tmp_path / "nb.txt.gz"
     with gzip.open(path, "wt", encoding="utf-8") as f:
         f.write("3 2\n/c/en/cat 1 0\n/c/fr/chat 9 9\n/c/en/ice_cream 1 1\ndog 0 1\n")
-    found = evaluate.read_text_vectors(path, {"cat", "dog", "chat"})
+    found = common.read_text_vectors(path, {"cat", "dog", "chat"})
     assert set(found) == {"cat", "dog"}
     assert found["cat"].tolist() == [1, 0]
 
@@ -52,7 +62,7 @@ def test_read_text_vectors_handles_headers_numberbatch_and_gzip(tmp_path):
 def test_read_text_vectors_prefers_lowercase_but_falls_back_to_capitalised(tmp_path):
     path = tmp_path / "ft.vec"
     path.write_text("4 2\nApple 9 9\nDecember 1 2\napple 3 4\nThe 5 5\n", encoding="utf-8")
-    found = evaluate.read_text_vectors(path, {"apple", "december", "the"})
+    found = common.read_text_vectors(path, {"apple", "december", "the"})
     assert found["apple"].tolist() == [3, 4]  # the lowercase fruit, not the company
     assert found["december"].tolist() == [1, 2]  # only a capitalised entry exists
     assert found["the"].tolist() == [5, 5]
